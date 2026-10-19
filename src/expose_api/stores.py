@@ -51,6 +51,8 @@ class MemoryStore[T]:
         if type(offset) is not int or type(limit) is not int or offset < 0 or not 1 <= limit <= 1000:
             raise ValueError("Pagination requires offset >= 0 and limit between 1 and 1000.")
         with self._lock:
+            if offset >= len(self._records):
+                return []
             return deepcopy(list(islice(self._records.values(), offset, offset + limit)))
 
     async def update(self, key: str, transform: Callable[[T], T]) -> T:

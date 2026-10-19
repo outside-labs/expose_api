@@ -51,6 +51,7 @@ class StoreTests(unittest.IsolatedAsyncioTestCase):
         notes = [await self.resource.create({"title": str(i)}) for i in range(4)]
         self.assertEqual(await self.resource.list(offset=1, limit=2), notes[1:3])
         self.assertEqual(await self.resource.list(offset=999), [])
+        self.assertEqual(await self.resource.list(offset=10**100), [])
         await self.resource.delete(notes[0].id)
         await self.resource.create(self.resource.schema.dump(notes[0]))
         self.assertEqual([n.id for n in await self.resource.list()], [n.id for n in notes[1:] + notes[:1]])
