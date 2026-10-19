@@ -109,6 +109,21 @@ class ASGITests(unittest.IsolatedAsyncioTestCase):
             result = await request(app)
         self.assertNotIn("credential-secret", result.body.decode() + str(logs.output))
 
+    async def test_header_iterator_survives_authorization_and_json_parsing(self):
+        app = App()
+        app.include(Note, store=MemoryStore(), authorize=lambda r: r.header("authorization") == "test-fixture")
+        headers = iter([(b"authorization", b"test-fixture"), (b"content-type", b"application/json")])
+        scope = {"type": "http", "method": "POST", "path": "/notes", "headers": headers}
+        messages = []
+        async def receive():
+            return {"type": "http.request", "body": b'{"title":"valid"}'}
+        async def send(event):
+            messages.append(event)
+        await app(scope, receive, send)
+        self.assertEqual(messages[0]["status"], 201)
+        self.assertIn(b'"title":"valid"', messages[1]["body"])
+        self.assertIs(scope["headers"], headers)
+
     async def test_validation_conflict_and_identifier_errors(self):
         invalid = await request(self.app, method="POST", data={"title": 4, "secret-value": "secret"})
         self.assertEqual(invalid.status, 422)
