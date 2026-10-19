@@ -107,6 +107,11 @@ class App:
         self._mounts: list[_Mount] = []
         self._frozen = False
 
+    def run(self, *, host: str = "127.0.0.1", port: int = 8000) -> None:
+        """Run the standard-library development HTTP server until interrupted."""
+        from .server import run
+        run(self, host=host, port=port)
+
     def include[T](self, model: type[T], *, store, path: str | None = None, id_field: str = "id",
                    operations: Iterable[str] = OPERATIONS, public: bool = False, authorize=None) -> Resource[T]:
         if self._frozen:
