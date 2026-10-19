@@ -6,6 +6,7 @@ from .errors import ConfigurationError, ConflictError, Issue, NotFoundError, Val
 from .models import ModelSchema
 from .resources import Resource
 from .stores import MemoryStore, Store
+from .asgi import App, ProtocolError, Request
 
-__all__ = ["ConfigurationError", "ConflictError", "Issue", "MemoryStore", "ModelSchema",
-           "NotFoundError", "Resource", "Store", "ValidationError"]
+__all__ = ["App", "ConfigurationError", "ConflictError", "Issue", "MemoryStore", "ModelSchema",
+           "NotFoundError", "ProtocolError", "Request", "Resource", "Store", "ValidationError"]
