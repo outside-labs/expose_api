@@ -11,8 +11,8 @@ does not publish a tag, a GitHub release or a package.
 3. Confirm the PyPI Trusted Publisher identifies owner `outside-labs`, repository
    `expose_api`, workflow `release.yaml`, and environment `pypi`. The publisher is
    configured separately on PyPI; this repository does not inspect that account.
-4. Review/create the GitHub `pypi` environment and its release access policy before
-   publication. Release preparation leaves environment security policies unchanged.
+4. Review the GitHub `pypi` environment before publication. It currently permits
+   only the `v0.1.0` tag; future versions need their intended tag allowed first.
 5. When publication is authorized, create an immutable `v0.1.0` tag on the verified
    main commit and push it. This **starts the upload workflow**.
 6. `.github/workflows/release.yaml` reruns checks, verifies tag/version agreement,
