@@ -31,4 +31,4 @@ jobs:
           version: '0.12.19'
           python-version: '3.14'
       - run: uv sync --locked
-      - run: uv run --frozen python -c "import expose_api"
+      - run: uv run --frozen python -m unittest discover -s tests -v
