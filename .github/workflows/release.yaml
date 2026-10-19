@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    name: Release checks
+    uses: ./.github/workflows/checks.yaml
+
+  build:
+    name: Verify tagged distributions
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require a tag on main
+        run: git merge-base --is-ancestor HEAD origin/main
+      - uses: astral-sh/setup-uv@c97f06e356bcca1b426f396ef93ec35ce149ce7b
+        with:
+          version: '0.12.19'
+          python-version: '3.14'
+      - run: uv sync --locked
+      - name: Build and verify exact artifacts
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: uv run --frozen python scripts/check_distribution.py --tag "$RELEASE_TAG" --output-dir dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-distributions
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/expose-api/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: release-distributions
+          path: dist
+      - name: Publish verified distributions
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
