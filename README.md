@@ -25,7 +25,12 @@ if __name__ == "__main__":
     app.run()
 ```
 
-Install a prepared wheel with `python -m pip install path/to/expose_api-0.1.0-py3-none-any.whl`.
+Install from PyPI:
+
+```sh
+python -m pip install expose-api==0.1.0
+```
+
 From a checkout, `uv sync --locked` installs the package, and
 `uv run python examples/notes.py` starts it at `http://127.0.0.1:8000`.
 
@@ -184,7 +189,7 @@ uv run --frozen python scripts/check_distribution.py
 The distribution check verifies explicit archive allowlists, metadata, zero
 runtime requirements, source/wheel parity and clean installations of both
 artifacts, then runs the suite and example outside the checkout. CI runs on
-Linux, macOS and Windows. [Release preparation](docs/releasing.md) describes the
+Linux, macOS and Windows. [Release preparation](https://github.com/outside-labs/expose_api/blob/main/docs/releasing.md) describes the
 separate publishing workflow.
 
 The [Project](https://github.com/orgs/outside-labs/projects/14) and

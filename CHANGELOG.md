@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 — prepared
+## 0.1.0 — 2026-10-19
 
 - Strict ordinary dataclass models, nested JSON values, UUID identities, field
   visibility, defaults and partial updates.
@@ -9,4 +9,4 @@
   bounded input, stable errors, HEAD/OPTIONS and mount-aware locations.
 - Standard-library development HTTP runner and a runnable notes example.
 - No runtime dependencies; Python 3.14+; cross-platform and installed-distribution
-  verification; Trusted Publishing workflow prepared for a separate release.
+  verification and OIDC Trusted Publishing.
