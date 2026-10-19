@@ -143,6 +143,8 @@ class App:
             return
         if scope["type"] != "http":
             raise ProtocolError("Unsupported ASGI scope type.")
+        scope = dict(scope)
+        scope["headers"] = tuple(scope.get("headers", ()))
         try:
             response = await self._dispatch(scope, receive)
         except _Disconnected:
