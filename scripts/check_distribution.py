@@ -65,13 +65,35 @@ def installed(artifact, work, name, version, *, requirements=None):
         "assert pathlib.Path(expose_api.__file__).with_name('py.typed').is_file(); "
         "assert not any(k in sys.modules for k in ('starlette','fastapi','pydantic','hidden_moves','backpack_store','enforce_type'))"
     )
-    run(python, "-I", "-c", probe, cwd=work)
+    if requirements is None:
+        run(python, "-I", "-c", probe + "; assert __import__('importlib.util').util.find_spec('enforce_type') is None", cwd=work)
+    else:
+        # Optional installation may provide the validator, but base imports
+        # must remain independent of it.
+        run(python, "-I", "-c", probe, cwd=work)
     if requirements is not None:
         receipt = work / f"{name}.json"
         run(python, "-I", "-W", "error::ResourceWarning", ROOT / "scripts" / "check_installed_events.py",
             "--tests", work / "tests", "--receipt", receipt, cwd=work)
-        return json.loads(receipt.read_text(encoding="utf-8"))
+        validation = work / f"{name}-validation.json"
+        run(python, "-I", "-W", "error::ResourceWarning", ROOT / "scripts" / "check_installed_validation.py",
+            "--tests", work / "tests", "--receipt", validation, "--backpack", cwd=work)
+        return {**json.loads(receipt.read_text(encoding="utf-8")),
+                "validation": json.loads(validation.read_text(encoding="utf-8"))}
     run(python, "-I", "-W", "error::ResourceWarning", "-m", "unittest", "discover", "-s", work / "tests", "-v", cwd=work)
+
+
+def installed_validation(artifact, work, label):
+    environment = work / f"{label}-enforce-type"
+    venv.EnvBuilder(with_pip=False).create(environment)
+    python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    run("uv", "pip", "install", "--python", python, f"{artifact}[enforce-type]", cwd=work)
+    run("uv", "pip", "check", "--python", python, cwd=work)
+    run(python, "-I", "-c", "import sys,expose_api; assert 'enforce_type' not in sys.modules", cwd=work)
+    receipt = work / f"{label}-validation.json"
+    run(python, "-I", "-W", "error::ResourceWarning", ROOT / "scripts" / "check_installed_validation.py",
+        "--tests", work / "tests", "--receipt", receipt, cwd=work)
+    return json.loads(receipt.read_text(encoding="utf-8"))
 
 
 def main():
@@ -79,6 +101,7 @@ def main():
     parser.add_argument("--tag")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--backpack", action="store_true", help="Qualify the locked optional event profile in both artifacts.")
+    parser.add_argument("--enforce-type", action="store_true", help="Normally install and qualify the compiled validation extra in both artifacts.")
     parser.add_argument("--receipt-file", type=Path)
     args = parser.parse_args()
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
@@ -115,7 +138,10 @@ def main():
         shutil.copytree(ROOT / "examples", work / "examples", ignore=shutil.ignore_patterns("__pycache__"))
         installed(wheel, work, "wheel-install", version)
         installed(source, work, "source-install", version)
-        profiles = {}
+        profiles, validation = {}, {}
+        if args.enforce_type:
+            for label, artifact in (("wheel", wheel), ("source", source)):
+                validation[label] = installed_validation(artifact, work, label)
         if args.backpack:
             requirements = work / "backpack-requirements.txt"
             run("uv", "export", "--frozen", "--extra", "backpack", "--no-dev", "--no-emit-project", "--no-hashes",
@@ -127,7 +153,7 @@ def main():
             args.output_dir.mkdir(parents=True, exist_ok=True)
             for path in (wheel, source):
                 shutil.copy2(path, args.output_dir / path.name)
-        result = {"version": version, "sha256": receipts, "optional_profiles": profiles}
+        result = {"version": version, "sha256": receipts, "optional_profiles": profiles, "validation_profiles": validation}
         if args.receipt_file:
             args.receipt_file.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(result, indent=2))

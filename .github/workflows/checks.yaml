@@ -72,7 +72,7 @@ jobs:
           version: '0.12.19'
           python-version: '3.14'
       - run: uv sync --locked
-      - run: uv run --frozen python scripts/check_distribution.py --backpack --receipt-file events-receipt.json
+      - run: uv run --frozen python scripts/check_distribution.py --backpack --enforce-type --receipt-file events-receipt.json
       - name: Retain installed event receipt
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

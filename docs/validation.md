@@ -56,3 +56,14 @@ The separately selected Backpack profile verifies checked predicates/revisions,
 rollback, current WebSocket projection and SQLite reopen using the same schema.
 These checks do not widen the Backpack scalar model intersection or change
 storage codec, authorization, journal ownership or subscription recovery rules.
+
+## Installed profiles
+
+Run `python scripts/check_distribution.py --enforce-type --backpack --receipt-file validation.json`
+to qualify both candidate wheel and source artifacts. Base environments verify
+the validator is absent. Each optional validation installation normally resolves
+the declared extra, verifies the published engine's source digest and executes
+ten model/HTTP cases without skips. The Backpack artifact profile also executes
+all eleven cases, including persistent checked/event acceptance, alongside its
+existing event suite. Linux, macOS and Windows retain these exact artifact,
+module, dependency and test receipts in CI. No package upload is performed.
