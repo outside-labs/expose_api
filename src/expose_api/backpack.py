@@ -115,14 +115,22 @@ class BackpackStore[T]:
     async def update(self, key: str, transform) -> T:
         return (await self.update_checked(key, transform=transform)).value
 
-    async def update_checked(self, key: str, *, transform, expected_revision: str | None = None):
-        """Transform under a write transaction, optionally checking a caller revision."""
+    async def update_checked(self, key: str, *, transform, expected_revision: str | None = None, predicate=None):
+        """Check current access, then revision and transform in one transaction."""
         self._revision(expected_revision)
         if not callable(transform) or inspect.iscoroutinefunction(transform):
             raise ValueError("Storage transforms must be synchronous.")
+        if predicate is not None and (not callable(predicate) or inspect.iscoroutinefunction(predicate)):
+            raise ValueError("Record predicates must be synchronous.")
         validation_issues, access_errors = [], []
         def update(model):
             row = model.get(key)
+            if predicate is not None:
+                try:
+                    self._check_predicate(predicate, row.value)
+                except (AccessDeniedError, NotFoundError) as error:
+                    access_errors.append(type(error))
+                    raise
             if expected_revision is not None and row.revision != expected_revision:
                 raise StaleRow("Record changed after the expected revision.")
             def checked(value):
@@ -181,11 +189,28 @@ class BackpackStore[T]:
             return _visible(values(), predicate, offset=offset, limit=limit, scan_limit=scan_limit)
         return await self._access_run(page)
 
-    async def delete_where(self, key: str, predicate) -> None:
+    @staticmethod
+    def _check_predicate(predicate, value):
+        allowed = predicate(deepcopy(value))
+        if inspect.isawaitable(allowed):
+            if inspect.iscoroutine(allowed):
+                allowed.close()
+            raise InvalidRow("Record predicates must be synchronous.")
+        if type(allowed) is not bool:
+            raise InvalidRow("Record predicates must return a boolean.")
+        if not allowed:
+            raise NotFoundError("Record not found.")
+
+    async def delete_where(self, key: str, predicate, *, expected_revision: str | None = None) -> None:
+        """Authorize before an optional revision check and delete atomically."""
+        self._revision(expected_revision)
+        if not callable(predicate) or inspect.iscoroutinefunction(predicate):
+            raise ValueError("Record predicates must be synchronous.")
         def delete(model):
             row = model.get(key)
-            if not predicate(deepcopy(row.value)):
-                raise NotFoundError("Record not found.")
+            self._check_predicate(predicate, row.value)
+            if expected_revision is not None and row.revision != expected_revision:
+                raise StaleRow("Record changed after the expected revision.")
             model.delete(key, expected_revision=row.revision)
         await self._access_run(delete)
 

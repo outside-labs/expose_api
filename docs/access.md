@@ -1,5 +1,14 @@
 # Identity and record access profile v1
 
+For application-owned checked REST profiles, optional `BackpackStore` methods
+can combine current-record access with conditional writes. Pass a synchronous
+boolean `predicate=` to `update_checked`, and an optional `expected_revision=`
+to `delete_where`. The detached current-value predicate runs before revision
+comparison in the same transaction; false conceals the row with `NotFoundError`.
+The update transform must still enforce proposed-value policy. A stale revision,
+denial or callback failure rolls back both the resource and event journal.
+These options add no implicit HTTP revision or authentication policy.
+
 This profile adopts caller-owned identity verification and synchronous record
 policies for native HTTP resources. It adds no credential database, identity
 provider, token issuer, session service or runtime dependency. An application
