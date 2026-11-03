@@ -135,6 +135,8 @@ def main():
         run("uv", "build", "--wheel", "--no-sources", "--out-dir", rebuilt, work / "source" / prefix)
         assert wheel_files(rebuilt / wheel.name, version, project) == original_wheel, "Source rebuild differs."
         shutil.copytree(ROOT / "tests", work / "tests", ignore=shutil.ignore_patterns("__pycache__"))
+        (work / "docs").mkdir()
+        shutil.copy2(ROOT / "docs/tabular-v1.json", work / "docs/tabular-v1.json")
         shutil.copytree(ROOT / "examples", work / "examples", ignore=shutil.ignore_patterns("__pycache__"))
         installed(wheel, work, "wheel-install", version)
         installed(source, work, "source-install", version)

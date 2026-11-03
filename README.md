@@ -232,3 +232,6 @@ profile for the supported scalar models and cancellation reconciliation.
 `app.openapi(version="1.0")` returns a detached OpenAPI 3.1.0 description of
 registered routes and their runtime model contracts. See [OpenAPI generation](docs/openapi.md)
 for customization, field visibility and schema limits.
+
+The [opt-in tabular HTTP contract](docs/tabular-v1.md) defines the separately
+implemented schema/query and revision-checked cell profile.
