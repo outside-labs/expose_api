@@ -1,0 +1,21 @@
+{
+  "contract": "tabular/1",
+  "requests": [
+    {"case": "literal query", "body": {"generation": 1, "columns": ["title"], "order": [{"column_id": "title", "descending": false}], "search": {"fields": ["title"], "term": "%_' OR 1=1"}, "limit": 50}, "status": 200},
+    {"case": "hidden search", "body": {"generation": 2, "search": {"fields": ["owner"], "term": "private"}}, "status": 400},
+    {"case": "unknown column", "body": {"generation": 3, "columns": ["unknown"]}, "status": 400},
+    {"case": "stale revision", "body": {"table_id": "work_items", "key": "row-002", "column_id": "title", "expected_revision": "1", "value": "Changed"}, "status": 409},
+    {"case": "denied row", "body": {"table_id": "work_items", "key": "row-003", "column_id": "title", "expected_revision": "1", "value": "Changed"}, "status": 404},
+    {"case": "unsupported rich type", "body": {"table_id": "work_items", "key": "row-002", "column_id": "rank", "expected_revision": "2", "value": {"decimal": "1.20"}}, "status": 422}
+  ],
+  "rejected_wire": [
+    {"query_string": "limit=1&limit=2", "code": "query"},
+    {"query_string": "search=%ZZ", "code": "query"},
+    {"json": "{\"generation\":1,\"generation\":2}", "code": "json"}
+  ],
+  "errors": [
+    {"error": {"code": "invalid_cursor", "message": "Invalid table cursor.", "details": []}},
+    {"error": {"code": "budget_exceeded", "message": "Table query exceeds the work budget.", "details": []}},
+    {"error": {"code": "read_only", "message": "Column is read-only.", "details": []}}
+  ]
+}
