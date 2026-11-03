@@ -118,6 +118,8 @@ def document(app, *, version="0.1.0", description=None):
                     if operation == "list":
                         value["x-access-scan-limit"] = mount.scan_limit
                     value["responses"]["401"]["headers"] = {"WWW-Authenticate": {"schema": {"type": "string"}}}
+                    for response in responses.values():
+                        response.setdefault("headers", {})["Cache-Control"] = {"schema": {"const": "no-store"}}
                 parameters = []
                 if suffix:
                     parameters.append({"name": "identity", "in": "path", "required": True,
@@ -146,6 +148,8 @@ def document(app, *, version="0.1.0", description=None):
                 operations["options"] = {"operationId": f"resource_{index}_{'item' if suffix else 'collection'}_options",
                                          "responses": {"204": {"description": "Allowed methods", "headers": {
                                              "Allow": {"schema": {"type": "string"}}}}}}
+                if mount.record_policy is not None:
+                    operations["options"]["responses"]["204"]["headers"]["Cache-Control"] = {"schema": {"const": "no-store"}}
                 paths[mount.path + suffix] = operations
     schemas["Error"] = ERROR_SCHEMA
     components = {"schemas": schemas}
