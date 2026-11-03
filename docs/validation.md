@@ -1,7 +1,9 @@
 # Optional compiled value validation
 
-Install `expose-api[enforce-type]` to select published enforce-type 0.1.0. Both
-base packages retain zero runtime requirements. Importing `expose_api` does not
+The adapter is an unreleased development profile. From this source checkout,
+install `.[enforce-type]` or run `uv sync --locked --extra enforce-type` to
+select published enforce-type 0.1.0. Both base packages retain zero runtime
+requirements. Importing `expose_api` does not
 import the optional validator; importing the adapter requires that extra.
 
 ```python
