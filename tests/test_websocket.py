@@ -159,6 +159,29 @@ class WebSocketTests(unittest.IsolatedAsyncioTestCase):
         self.addAsyncCleanup(socket.close)
         self.assertEqual((await socket.start())["code"], 1008)
 
+    async def test_terminal_close_drains_stream_before_a_stalled_close_send(self):
+        close_started, release = asyncio.Event(), asyncio.Event()
+        socket = Socket(self.app)
+        async def held_close(event):
+            if event["type"] == "websocket.close":
+                close_started.set()
+                await release.wait()
+            await socket.outgoing.put(event)
+        socket.send = held_close
+        self.addAsyncCleanup(socket.close)
+        await socket.start()
+        await socket.subscribe()
+        await socket.next()
+        try:
+            await socket.subscribe()  # A second frame is terminal protocol input.
+            await asyncio.wait_for(close_started.wait(), 1)
+            await self.resource.update("a", {"title": "After close"})
+            with self.assertRaises(TimeoutError):
+                await asyncio.wait_for(socket.outgoing.get(), 0.05)
+        finally:
+            release.set()
+        self.assertEqual((await socket.next())["code"], 1008)
+
     async def test_lifespan_shutdown_closes_sockets_before_owned_store_cleanup(self):
         order = []
         @asynccontextmanager
