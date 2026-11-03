@@ -113,7 +113,7 @@ an identity provider, package publication or deployment.
 Register `app.tabular(resource, table_id="work_items", schema_version="1",
 application_scope="my-application", columns=[TableColumn("title", "title",
 "Title", sortable=True, searchable=True)])` after `App.include`. The optional
-Backpack profile pins source `99a5fdee1e79e0eee9abde4be533d4ec2586120d`.
+Backpack profile pins source `9a691aa551bf7fb42134168452bbdb2e1d454928`.
 The registered Store must expose the selected public query columns. There is
 no implicit schema inference, write route or writable capability. Query
 responses reauthorize candidates inside one owned transaction, retain stable
