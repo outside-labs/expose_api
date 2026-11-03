@@ -32,7 +32,9 @@ No model is imported from stored data.
   Transforms must avoid external side effects and recursive storage calls.
 - `delete` reads and deletes in one write transaction. Revisions are canonical
   decimal strings and increment on replacement. The adapter exposes an explicit
-  checked update for application-level optimistic concurrency; ordinary CRUD
+  checked update and deletion for application-level optimistic concurrency;
+  stale caller revisions map to `RevisionConflictError` and HTTP 409 with code
+  `revision_conflict`. Ordinary CRUD
   preserves the existing unconditional atomic-transform contract.
 
 ## Ownership, durability and recovery

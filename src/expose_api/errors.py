@@ -30,3 +30,7 @@ class NotFoundError(LookupError):
 
 class ConflictError(ValueError):
     """A record with this identity already exists."""
+
+
+class RevisionConflictError(ConflictError):
+    """A checked mutation used a stale committed revision."""

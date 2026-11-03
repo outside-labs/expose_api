@@ -6,7 +6,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from expose_api import App, ConflictError, NotFoundError, Resource
+from expose_api import App, ConflictError, NotFoundError, Resource, ValidationError
+from expose_api.errors import RevisionConflictError
 from asgi_client import request
 
 try:
@@ -64,8 +65,12 @@ class BackpackTests(unittest.IsolatedAsyncioTestCase):
         original = await self.store.get_row("a")
         await asyncio.gather(*[self.store.update("a", lambda value: replace(value, count=value.count + 1)) for _ in range(12)])
         self.assertEqual((await self.store.get("a")).count, 12)
-        with self.assertRaises(ConflictError):
+        with self.assertRaises(RevisionConflictError):
             await self.store.update_checked("a", expected_revision=original.revision, transform=lambda value: value)
+        with self.assertRaises(RevisionConflictError):
+            await self.store.delete_checked("a", expected_revision=original.revision)
+        with self.assertRaises(ValidationError):
+            await self.store.delete_checked("a", expected_revision="01")
         for transform in (lambda value: replace(value, id="changed"), lambda value: replace(value, count="private")):
             with self.assertRaises(TransactionError):
                 await self.store.update("a", transform)
@@ -86,6 +91,13 @@ class BackpackTests(unittest.IsolatedAsyncioTestCase):
         invalid = await request(app, "/items/a", "PATCH", data={"count": True})
         self.assertEqual(invalid.status, 422)
         self.assertEqual((await request(app, "/items/a")).json["count"], 0)
+        await self.resource.update("a", {"count": 1})
+        async def stale_update(key, transform):
+            return (await self.store.update_checked(key, transform=transform, expected_revision="1")).value
+        self.store.update = stale_update
+        stale = await request(app, "/items/a", "PATCH", data={"count": 2})
+        self.assertEqual((stale.status, stale.json["error"]["code"]), (409, "revision_conflict"))
+        self.assertEqual((await request(app, "/items/a")).json["count"], 1)
         self.assertEqual((await request(app, "/items/a", "DELETE")).status, 204)
         self.assertEqual((await request(app, "/items/a")).status, 404)
 

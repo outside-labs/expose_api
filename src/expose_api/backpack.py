@@ -1,16 +1,17 @@
 """Explicit optional adapter for the qualified Backpack SQLite profile."""
 
 import inspect
+import re
 from copy import deepcopy
 from dataclasses import fields
 
-from .errors import ConfigurationError, ConflictError, Issue, NotFoundError, ValidationError
+from .errors import ConfigurationError, ConflictError, Issue, NotFoundError, RevisionConflictError, ValidationError
 from .models import ModelSchema
 
 try:
     from backpack_store import (
         AlreadyExistsError, AsyncApplicationStore, CodecError, ConstraintError,
-        NotFoundError as MissingRow, RevisionConflictError, ValidationError as InvalidRow,
+        NotFoundError as MissingRow, RevisionConflictError as StaleRow, ValidationError as InvalidRow,
     )
     from backpack_store.enforce_type_codec import EnforceTypeCodec
 except ImportError:
@@ -45,7 +46,9 @@ class BackpackStore[T]:
             return await self._backend.run(callback, transactional=transactional)
         except MissingRow:
             raise NotFoundError("Record not found.") from None
-        except (AlreadyExistsError, ConstraintError, RevisionConflictError):
+        except StaleRow:
+            raise RevisionConflictError("Record changed after the expected revision.") from None
+        except (AlreadyExistsError, ConstraintError):
             raise ConflictError("Record conflicts with committed state.") from None
         except (InvalidRow, CodecError):
             raise ValidationError(Issue((), "storage_model")) from None
@@ -70,8 +73,10 @@ class BackpackStore[T]:
         return await self._run(lambda model: model.get(key))
 
     async def list(self, *, offset: int = 0, limit: int = 100) -> list[T]:
-        if type(offset) is not int or not 0 <= offset <= 10000 or type(limit) is not int or not 1 <= limit <= 1000:
-            raise ValueError("Persistent pagination requires offset 0–10000 and limit 1–1000.")
+        if type(offset) is not int or not 0 <= offset <= 10000:
+            raise ValidationError(Issue(("offset",), "range"))
+        if type(limit) is not int or not 1 <= limit <= 1000:
+            raise ValidationError(Issue(("limit",), "range"))
         def page(model):
             after, remaining = None, offset
             while remaining:
@@ -87,12 +92,13 @@ class BackpackStore[T]:
 
     async def update_checked(self, key: str, *, transform, expected_revision: str | None = None):
         """Transform under a write transaction, optionally checking a caller revision."""
+        self._revision(expected_revision)
         if not callable(transform) or inspect.iscoroutinefunction(transform):
             raise ValueError("Storage transforms must be synchronous.")
         def update(model):
             row = model.get(key)
             if expected_revision is not None and row.revision != expected_revision:
-                raise RevisionConflictError("Record changed after the expected revision.")
+                raise StaleRow("Record changed after the expected revision.")
             def checked(value):
                 result = transform(value)
                 if inspect.isawaitable(result):
@@ -104,8 +110,21 @@ class BackpackStore[T]:
         return await self._run(update, transactional=True)
 
     async def delete(self, key: str) -> None:
+        await self.delete_checked(key)
+
+    @staticmethod
+    def _revision(revision):
+        if revision is not None and (type(revision) is not str or not re.fullmatch(r"[1-9][0-9]{0,18}", revision)
+                                     or int(revision) > 9223372036854775807):
+            raise ValidationError(Issue(("revision",), "range"))
+
+    async def delete_checked(self, key: str, *, expected_revision: str | None = None) -> None:
+        """Delete atomically, optionally checking the caller's committed revision."""
+        self._revision(expected_revision)
         def delete(model):
             row = model.get(key)
+            if expected_revision is not None and row.revision != expected_revision:
+                raise StaleRow("Record changed after the expected revision.")
             model.delete(key, expected_revision=row.revision)
         await self._run(delete, transactional=True)
 
