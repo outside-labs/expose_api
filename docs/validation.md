@@ -40,3 +40,19 @@ store transforms and record policies retain their atomic ownership.
 This is a finite compatibility adapter, with no performance claim or default
 backend migration. The [assessment](https://github.com/outside-labs/enforce_type/blob/main/docs/expose-api.md)
 records the policy differences that prevent a whole-model replacement.
+
+## Resource acceptance
+
+`examples/validated_notes.py` is an executable public synthetic-resource example.
+It keeps its password field hidden from responses. The selected adapter is also
+qualified through full ASGI CRUD transcripts and detached OpenAPI documents
+compared with the built-in schema. Nested secrets, read-only input, immutable
+identities, unknown/dynamic keys and constructor failures retain the same
+projection and error behavior.
+
+Protected resource views preserve the schema and conceal denied records. Failed
+validation and proposed-owner changes leave records and event cursors unchanged.
+The separately selected Backpack profile verifies checked predicates/revisions,
+rollback, current WebSocket projection and SQLite reopen using the same schema.
+These checks do not widen the Backpack scalar model intersection or change
+storage codec, authorization, journal ownership or subscription recovery rules.

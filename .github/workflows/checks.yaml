@@ -44,7 +44,7 @@ jobs:
         run: |
           uv sync --locked --extra enforce-type
           uv run --frozen python -c "from expose_api.enforce_type import EnforceTypeSchema"
-          uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p test_enforce_type.py -v
+          uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p 'test_enforce_type*.py' -v
       - name: Install qualified optional Backpack profile
         run: uv sync --locked --extra backpack
       - name: Qualify optional Store and HTTP behavior
@@ -53,6 +53,7 @@ jobs:
           uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p 'test_backpack*.py' -v
           uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p 'test*access.py' -v
           uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p test_persistent_websocket.py -v
+          uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p 'test_enforce_type*.py' -v
 
   distribution:
     name: Build and installed distributions (${{ matrix.os }})
