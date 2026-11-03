@@ -72,7 +72,7 @@ class BackpackTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValidationError):
             await self.store.delete_checked("a", expected_revision="01")
         for transform in (lambda value: replace(value, id="changed"), lambda value: replace(value, count="private")):
-            with self.assertRaises(TransactionError):
+            with self.assertRaises(ValidationError):
                 await self.store.update("a", transform)
         def failed(value):
             value.title = "uncommitted"
@@ -82,6 +82,27 @@ class BackpackTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("private value", str(caught.exception))
         self.assertEqual((await self.store.get_row("a")).revision, "13")
         self.assertEqual((await self.store.get("a")).title, "First")
+
+    async def test_transform_validation_is_http_422_after_rollback(self):
+        @dataclass
+        class Bounded:
+            id: str
+            title: str
+            def __post_init__(self):
+                if len(self.title) > 10:
+                    raise ValueError("private submitted title")
+        store = await BackpackStore.open(Bounded, self.path, namespace="bounded", table="app_bounded", type_key="example.bounded")
+        self.addAsyncCleanup(store.aclose)
+        app = App()
+        app.include(Bounded, store=store, path="/bounded", public=True)
+        await request(app, "/bounded", "POST", data={"id": "a", "title": "Initial"})
+        before = await store.get_row("a")
+        invalid = await request(app, "/bounded/a", "PATCH", data={"title": "private submitted title"})
+        self.assertEqual(invalid.status, 422)
+        self.assertEqual(invalid.json["error"]["details"], [{"path": [], "code": "constructor"}])
+        self.assertNotIn("private", invalid.body.decode())
+        after = await store.get_row("a")
+        self.assertEqual((after.value.title, after.revision), (before.value.title, before.revision))
 
     async def test_http_resource_uses_validated_persistent_store(self):
         app = App()
