@@ -7,6 +7,14 @@ class ConfigurationError(ValueError):
     """An application or model cannot be configured as requested."""
 
 
+class AccessDeniedError(PermissionError):
+    """A proposed record is forbidden by the caller's value policy."""
+
+
+class AccessScanError(RuntimeError):
+    """The finite visible-list scan cannot complete the requested page."""
+
+
 @dataclass(frozen=True, slots=True)
 class Issue:
     path: tuple[str | int, ...]
