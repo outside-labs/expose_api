@@ -1,11 +1,14 @@
 # expose-api
 
+See [portable acceptance runners](docs/ci.md) for the default three-OS CI matrix
+and explicit manual ARM64 selection.
+
 Resources can explicitly select a `ModelSchema` subclass with
 `App.include(..., schema=selected_schema)` or `Resource(..., schema=...)`.
 The schema must use the same model and `id_field`; protected principal views
 retain that selection. Omitting it keeps the built-in model contract.
-The [optional Enforce Type adapter](docs/validation.md) reuses compiled values
-while preserving the API's identity, visibility and error policies.
+The [optional Enforce Type adapter](docs/validation.md) is a development profile
+that reuses compiled values while preserving identity, visibility and errors.
 
 Turn ordinary typed dataclasses into JSON applications. Native ASGI, generated
 CRUD, and a standard-library development runner, with **no runtime dependencies**.
