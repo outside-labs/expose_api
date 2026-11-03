@@ -29,7 +29,7 @@ def metadata(raw, project):
                           ("Description-Content-Type", "text/markdown")):
         assert message.get_all(key) == [expected], (key, message.get_all(key))
     requirements = message.get_all("Requires-Dist") or []
-    assert len(requirements) == 1 and 'extra == "backpack"' in requirements[0]
+    assert len(requirements) == 1 and requirements[0].partition(";")[2].strip().replace('"', "'") == "extra == 'backpack'"
     assert "54f5a1e883fcc32f8d87cc553dc83dae0434300d" in requirements[0]
     assert message.get_all("Provides-Extra") == ["backpack"]
     assert message.get_payload().strip() == (ROOT / "README.md").read_text().strip()
