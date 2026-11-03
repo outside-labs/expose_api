@@ -37,13 +37,18 @@ jobs:
       - name: Qualify optional Store and HTTP behavior
         run: |
           uv run --frozen python -c "from expose_api.backpack import BackpackStore"
-          uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p test_backpack.py -v
+          uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p 'test_backpack*.py' -v
           uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p 'test*access.py' -v
+          uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p test_persistent_websocket.py -v
 
   distribution:
-    name: Build and installed distributions
-    runs-on: ubuntu-latest
+    name: Build and installed distributions (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -53,4 +58,11 @@ jobs:
           version: '0.12.19'
           python-version: '3.14'
       - run: uv sync --locked
-      - run: uv run --frozen python scripts/check_distribution.py
+      - run: uv run --frozen python scripts/check_distribution.py --backpack --receipt-file events-receipt.json
+      - name: Retain installed event receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: events-${{ matrix.os }}
+          path: events-receipt.json
+          if-no-files-found: error

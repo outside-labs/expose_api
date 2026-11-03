@@ -157,3 +157,21 @@ key cannot be recreated; MemoryStore permits that case. The stream position has
 a finite exact-integer bound and fails writes on exhaustion rather than wrapping.
 
 Reference: [ASGI WebSocket specification](https://asgi.readthedocs.io/en/stable/specs/www.html#websocket).
+
+## Executable acceptance
+
+```sh
+uv sync --locked --extra backpack
+uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p 'test*websocket.py' -v
+uv run --frozen python scripts/check_distribution.py --backpack --receipt-file events-receipt.json
+```
+
+The distribution command builds this exact checkout, checks archive contents
+and source/wheel parity, then installs both artifacts outside the repository.
+Base installations run without optional packages. Two additional installations
+consume the existing lock's exact optional dependency revisions and run the
+event, access, transaction and real-process subscription acceptance without
+skips. Receipts retain artifact/module hashes, backend commit, validation
+version, platform/Python and check counts. CI retains these receipts on Linux,
+macOS and Windows. This qualifies ASGI message behavior; browser/proxy/production
+host integration and the spatial UI WebSocket consumer retain their own tasks.
