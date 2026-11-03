@@ -1,8 +1,8 @@
-"""Explicit read-only tabular schemas and policy-filtered registered pages."""
+"""Explicit tabular schemas, policy-filtered pages and checked scalar edits."""
 
 import asyncio
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 import re
@@ -10,7 +10,7 @@ import types
 from typing import Union, get_args, get_origin
 
 from .access import RecordAccess
-from .errors import ConfigurationError
+from .errors import ConfigurationError, Issue, ValidationError
 
 ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z", re.ASCII)
 KINDS = {str: "text", bool: "boolean", int: "integer", float: "number"}
@@ -23,11 +23,12 @@ class TableColumn:
     label: str
     sortable: bool = False
     searchable: bool = False
+    writable: bool = False
 
     def __post_init__(self):
         if (type(self.id) is not str or not ID.fullmatch(self.id) or type(self.field) is not str
                 or type(self.label) is not str or len(self.label) > 256
-                or type(self.sortable) is not bool or type(self.searchable) is not bool):
+                or any(type(value) is not bool for value in (self.sortable, self.searchable, self.writable))):
             raise ConfigurationError("Invalid tabular column declaration.")
 
 
@@ -59,9 +60,13 @@ class TabularProfile:
             scalar = tuple(arg for arg in args if arg is not type(None))
             if len(scalar) != 1 or scalar[0] not in KINDS or column.searchable and scalar[0] is not str:
                 raise ConfigurationError("Tabular columns require the portable scalar profile.")
+            if column.writable and (spec.read_only or column.field == schema.id_field or "update" not in mount.operations
+                                    or not callable(getattr(mount.resource.store, "update_checked", None))):
+                raise ConfigurationError("Writable columns require mutable fields and checked updates.")
             self._public.append(dict(id=column.id, label=column.label, type=KINDS[scalar[0]], nullable=type(None) in args,
-                                     visible=True, sortable=column.sortable, searchable=column.searchable, writable=False))
+                                     visible=True, sortable=column.sortable, searchable=column.searchable, writable=column.writable))
         self._by_id = {c.id: c for c in self.columns}
+        self.editable = any(c.writable for c in self.columns)
 
     def schema(self):
         return dict(contract="tabular/1", table_id=self.table_id, schema_version=self.schema_version,
@@ -162,24 +167,73 @@ class TabularProfile:
         return dict(contract="tabular/1", table_id=self.table_id, schema_version=self.schema_version,
                     generation=query["generation"], columns=query["columns"], rows=projected, next_cursor=next_cursor)
 
+    async def edit(self, data, principal):
+        from .asgi import _HTTPError
+        if (type(data) is not dict or data.keys() != {"table_id", "key", "column_id", "expected_revision", "value"}
+                or data["table_id"] != self.table_id or type(data["key"]) is not str or not ID.fullmatch(data["key"])
+                or type(data["column_id"]) is not str
+                or type(data["expected_revision"]) is not str
+                or not re.fullmatch(r"[1-9][0-9]{0,18}", data["expected_revision"], re.ASCII)
+                or int(data["expected_revision"]) > 9223372036854775807):
+            raise _HTTPError(400, "query", "Invalid cell edit.")
+        column = self._by_id.get(data["column_id"])
+        if column is None or not column.writable:
+            raise _HTTPError(422, "read_only", "Column is read-only.")
+        value = data["value"]
+        if type(value) not in (str, bool, int, float, type(None)):
+            raise _HTTPError(422, "unsupported_type", "Unsupported cell value.")
+        schema = self.mount.resource.schema
+        # Admission checks scalar type without coercing integer values into floats.
+        public = next(c for c in self._public if c["id"] == column.id)
+        if (value is None and not public["nullable"] or value is not None and KINDS.get(type(value)) != public["type"]):
+            raise ValidationError(Issue((), "type"))
+        try:
+            changes = schema.patch({column.field: value})
+        except ValidationError as error:
+            raise ValidationError(*(Issue((), issue.code) for issue in error.issues)) from None
+        access = RecordAccess(principal, self.mount.record_policy, self.scan_limit) if self.mount.record_policy else None
+        def transform(current):
+            try:
+                proposed = replace(current, **changes)
+            except (TypeError, ValueError):
+                raise ValidationError(Issue((), "constructor")) from None
+            schema.dump(proposed)
+            if access:
+                access.check("update", proposed)
+            return proposed
+        from backpack_store import StorageError
+        try:
+            row = await self.mount.resource.store.update_checked(data["key"], expected_revision=data["expected_revision"],
+                transform=transform, predicate=(lambda current: access.allows("update", current)) if access else None)
+        except ValidationError as error:
+            raise ValidationError(*(Issue((), issue.code) for issue in error.issues)) from None
+        except StorageError:
+            raise _HTTPError(503, "storage_unavailable", "Table storage is unavailable.") from None
+        committed = schema.dump(row.value)
+        return dict(contract="tabular/1", table_id=self.table_id, schema_version=self.schema_version,
+                    row=dict(key=row.key, revision=row.revision, values={c.id: committed[c.field] for c in self.columns}))
+
     async def dispatch(self, app, suffix, scope, receive, state):
         from .asgi import _Disconnected, _HTTPError, _response
         state.protected = self.mount.record_policy is not None
         method = scope["method"]
-        methods = {"schema": ("GET", "HEAD", "OPTIONS"), "query": ("POST", "OPTIONS")}.get(suffix)
+        routes = {"schema": ("GET", "HEAD", "OPTIONS"), "query": ("POST", "OPTIONS")}
+        if self.editable:
+            routes["cell"] = ("POST", "OPTIONS")
+        methods = routes.get(suffix)
         if methods is None:
             raise _HTTPError(404, "not_found", "Route not found.")
         if method == "OPTIONS":
             return _response(204, headers=((b"allow", ", ".join(methods).encode()),))
         if method not in methods:
             raise _HTTPError(405, "method_not_allowed", "Method not allowed.", headers=((b"allow", ", ".join(methods).encode()),))
-        context = await app._context(self.mount, scope, "list", None)
+        context = await app._context(self.mount, scope, "update" if suffix == "cell" else "list", None)
         if scope.get("query_string", b""):
             raise _HTTPError(400, "query", "Invalid table query parameters.")
         if suffix == "schema":
             return _response(200, self.schema())
         data = await app._body(scope, receive, max_size=65536)
-        task = asyncio.create_task(self.query(data, context.principal))
+        task = asyncio.create_task((self.edit if suffix == "cell" else self.query)(data, context.principal))
         async def disconnected():
             while True:
                 event = await receive()
@@ -238,15 +292,24 @@ def openapi_paths(app):
                    (*identity, "generation", "columns", "rows", "next_cursor"))
         schema = obj(dict(**identity, columns=dict(type="array", maxItems=64, items={"enum": profile._public}),
                           limits={"const": profile.schema()["limits"]}), (*identity, "columns", "limits"))
-        for suffix, method, result in (("schema", "get", schema), ("query", "post", page)):
+        edit = obj(dict(table_id={"const": profile.table_id}, key=dict(type="string", pattern="^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"),
+                        column_id={"enum": [c.id for c in profile.columns if c.writable]},
+                        expected_revision=dict(type="string", pattern="^[1-9][0-9]{0,18}$", **{"x-maximum": "9223372036854775807"}),
+                        value={"type": ["string", "boolean", "integer", "number", "null"]}),
+                   ("table_id", "key", "column_id", "expected_revision", "value"))
+        edited = obj(dict(**identity, row=row), (*identity, "row"))
+        routes = [("schema", "get", schema), ("query", "post", page)]
+        if profile.editable:
+            routes.append(("cell", "post", edited))
+        for suffix, method, result in routes:
             responses = {"200": {"description": "Detached tabular result", "content": {"application/json": {"schema": result}}}}
-            for code in (400, 404, 405, 413, 415, 422, 500, 503):
+            for code in (400, 404, 405, 409, 413, 415, 422, 500, 503):
                 responses[str(code)] = {"description": "Value-free table error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
             operation = dict(operationId=f"table_{profile.table_id}_{suffix}", responses=responses,
                              **{"x-max-response-bytes": 4194304, "x-query-additional-properties": False,
                                 "x-access-scan-limit": profile.scan_limit, "x-sqlite-work-limit": profile.max_work})
             if method == "post":
-                operation["requestBody"] = {"required": True, "content": {"application/json": {"schema": descriptor}}}
+                operation["requestBody"] = {"required": True, "content": {"application/json": {"schema": edit if suffix == "cell" else descriptor}}}
                 operation["x-max-body-bytes"] = min(app.max_body_size, 65536)
             if profile.mount.authorize:
                 responses["403"] = {"description": "Operation denied"}

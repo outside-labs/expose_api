@@ -128,7 +128,7 @@ class App:
         self._tables = {}
 
     def tabular(self, resource, **options):
-        """Opt into the bounded read-only registered tabular profile."""
+        """Opt into bounded registered tables and explicitly writable columns."""
         from .tabular import TabularProfile
         mount = next((mount for mount in self._mounts if mount.resource is resource), None)
         if self._frozen or mount is None or mount.path in self._tables:
