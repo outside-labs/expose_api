@@ -1,8 +1,8 @@
 # Opt-in tabular HTTP profile, version 1
 
 This adopts [tabular/1](https://github.com/outside-labs/compose_application/blob/d8c4e3a1d4cd1979222c0dddcbf0a14d44ee415c/docs/tabular-v1.md).
-The finite requests/errors in `tabular-v1.json` are contract examples, not a
-claim that routes exist before API-TAB-02/API-TAB-03 implement them. Existing
+The finite requests/errors in `tabular-v1.json` accompany the implemented
+schema/query and explicitly enabled checked cell routes. Existing
 CRUD routes and shapes stay unchanged. A trusted application explicitly
 registers a tabular profile on an already included Resource, with declared
 column IDs/field mappings, table/schema IDs and a stable application scope.
@@ -17,7 +17,7 @@ Relative to the selected resource mount:
 | --- | --- | --- |
 | `GET /_table/schema` | list authorization | Public visible column schema/capabilities, table/schema identity and limits |
 | `POST /_table/query` | list authorization | Detached projected rows, each with separate durable key and decimal-string revision, request generation and optional cursor |
-| `POST /_table/cell` | update authorization, later API-TAB-03 | Checked single-cell result with committed projected row |
+| `POST /_table/cell` | update authorization, explicitly writable columns | Checked single-cell result with committed projected row |
 
 HEAD follows GET; OPTIONS discloses only enabled methods. Every route rejects
 all URL query parameters, including duplicate or malformed encodings. Query
@@ -48,8 +48,8 @@ Literal search uses 1–8 distinct visible searchable text columns and at most
 256 Unicode code points, case-sensitive with no normalization. Empty term
 clears search. Field order canonicalizes; percent, underscore, backslash,
 quotes, NUL and SQL-like input remain literal. Nulls sort last in either
-direction, with ascending registered domain key resolving ties. Read-only
-API-TAB-02 schemas advertise writable=false until checked editing is selected.
+direction, with ascending registered domain key resolving ties. Columns default
+to writable=false; explicitly select writable=True to enable checked editing.
 
 ## Access, cursors, work and lifecycle
 
@@ -105,18 +105,42 @@ Errors use the existing `{error:{code,message,details}}` envelope with fixed
 value-free messages/issues, never query text, credentials, principal identity,
 model values or SQL. OpenAPI must describe only actually implemented routes,
 declared visible column types, bounded request/page shapes, credential security
-and these public outcomes. This contract document does not add runtime routes,
-an identity provider, package publication or deployment.
+and these public outcomes. No identity provider, package publication or
+deployment is implied.
 
-## Read-only implementation
+## Registration and edits
 
 Register `app.tabular(resource, table_id="work_items", schema_version="1",
 application_scope="my-application", columns=[TableColumn("title", "title",
 "Title", sortable=True, searchable=True)])` after `App.include`. The optional
 Backpack profile pins source `9a691aa551bf7fb42134168452bbdb2e1d454928`.
 The registered Store must expose the selected public query columns. There is
-no implicit schema inference, write route or writable capability. Query
+no implicit schema inference or writable capability. Query
 responses reauthorize candidates inside one owned transaction, retain stable
 keys/revisions separately from projection and never expose hidden counts.
 Disconnected/canceled work refuses its response; owned storage close drains any
-already-dispatched read. OpenAPI contains only the implemented schema/query routes.
+already-dispatched operation. OpenAPI contains only the enabled routes.
+
+Declare `TableColumn("title", "title", "Title", searchable=True,
+sortable=True, writable=True)` to select editing. The included resource must
+enable update and its store must expose `update_checked`. Identity fields,
+model read-only metadata and write-only/undeclared fields cannot be writable.
+When every column is read-only, the cell route remains absent.
+
+Post the exact cell request above to `/_table/cell`. The result is
+`{contract, table_id, schema_version, row: {key, revision, values}}`; `values`
+contains all declared visible columns from the committed row. The expected
+revision is mandatory, and number columns require actual finite floats;
+integers and booleans are distinct. Rich objects/arrays return unsupported_type,
+scalar/model mismatches return validation, and unavailable storage returns 503.
+All errors omit submitted values and internal field mappings.
+
+Current-row access is checked before revealing a stale revision. Both current
+and complete proposed records use update policy in the same owned transaction.
+Two independent writers editing different cells of one row can conflict; writes
+to other rows remain independent. A cancellation or lost HTTP response can
+follow commit: refresh authoritative pages and review the current row before
+an explicit retry. Neither the transport nor storage substitutes a new revision
+or automatically retries a write. Existing CRUD and single-record events keep
+their contracts; this adds no formulas, multi-cell transactions or collection
+subscriptions.
