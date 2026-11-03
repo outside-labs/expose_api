@@ -112,6 +112,11 @@ class App:
         from .server import run
         run(self, host=host, port=port)
 
+    def openapi(self, *, version: str = "0.1.0", description: str | None = None) -> dict:
+        """Generate a detached description of explicitly registered resources."""
+        from .openapi import document
+        return document(self, version=version, description=description)
+
     def include[T](self, model: type[T], *, store, path: str | None = None, id_field: str = "id",
                    operations: Iterable[str] = OPERATIONS, public: bool = False, authorize=None) -> Resource[T]:
         if self._frozen:
