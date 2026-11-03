@@ -201,11 +201,18 @@ class EventSockets:
                         await asyncio.sleep(config.poll_interval)
 
             owned = [asyncio.create_task(watch()), asyncio.create_task(stream())]
-            done, _ = await asyncio.wait(owned, return_when=asyncio.FIRST_COMPLETED)
-            if owned[0] in done:
-                owned[0].result()
-            else:
-                owned[1].result()
+            try:
+                done, _ = await asyncio.wait(owned, return_when=asyncio.FIRST_COMPLETED)
+                if owned[0] in done:
+                    owned[0].result()
+                else:
+                    owned[1].result()
+            finally:
+                # A terminal receive must stop the sender before close can block.
+                for child in owned:
+                    child.cancel()
+                await asyncio.gather(*owned, return_exceptions=True)
+                owned.clear()
         except asyncio.CancelledError:
             if not self.stopping:
                 raise
