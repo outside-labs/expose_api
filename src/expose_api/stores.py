@@ -1,12 +1,15 @@
 """Asynchronous storage contracts and an isolated, atomic in-memory store."""
 
 from collections.abc import Callable
+from collections import deque
 from copy import deepcopy
 from itertools import islice
 from threading import RLock
 from typing import Protocol, runtime_checkable
+from uuid import uuid4
 
-from .errors import AccessScanError, ConflictError, NotFoundError
+from .errors import AccessScanError, ConfigurationError, ConflictError, NotFoundError
+from .events import EventSnapshot, _event_key, _event_limit, _event_page
 
 
 @runtime_checkable
@@ -53,17 +56,48 @@ def _visible(values, predicate, *, offset, limit, scan_limit):
 class MemoryStore[T]:
     """Insertion-ordered, process-local storage with no persistence or eviction."""
 
-    def __init__(self):
+    def __init__(self, *, events: int = 0):
+        self._event_retention = _event_limit(events, allow_disabled=True)
+        self._event_head = uuid4().hex if events else None
+        self._changes = deque(maxlen=events or 1)
         self._records: dict[str, T] = {}
         self._lock = RLock()
 
+    @property
+    def events_enabled(self):
+        return self._event_retention > 0
+
+    def _changed(self, key):
+        if self.events_enabled:
+            current = uuid4().hex
+            self._changes.append((self._event_head, current, key))
+            self._event_head = current
+
+    async def event_snapshot(self, key):
+        with self._lock:
+            if not self.events_enabled:
+                raise ConfigurationError("Events are not enabled for this store.")
+            _event_key(key)
+            if key not in self._records:
+                raise NotFoundError("Record not found.")
+            return EventSnapshot(deepcopy(self._records[key]), self._event_head)
+
+    async def event_changes(self, cursor, *, key, limit=64):
+        with self._lock:
+            if not self.events_enabled:
+                raise ConfigurationError("Events are not enabled for this store.")
+            return _event_page(self._event_head, self._changes, cursor, key, limit)
+
     async def create(self, key: str, value: T) -> T:
         with self._lock:
+            if self.events_enabled:
+                _event_key(key)
             if key in self._records:
                 raise ConflictError("Record already exists.")
             stored = deepcopy(value)
             result = deepcopy(stored)
             self._records[key] = stored
+            self._changed(key)
             return result
 
     async def get(self, key: str) -> T:
@@ -88,6 +122,7 @@ class MemoryStore[T]:
             stored = deepcopy(value)
             result = deepcopy(stored)
             self._records[key] = stored
+            self._changed(key)
             return result
 
     async def delete(self, key: str) -> None:
@@ -95,6 +130,7 @@ class MemoryStore[T]:
             if key not in self._records:
                 raise NotFoundError("Record not found.")
             del self._records[key]
+            self._changed(key)
 
     async def list_where(self, predicate, *, offset=0, limit=100, scan_limit=10000):
         with self._lock:
@@ -105,3 +141,4 @@ class MemoryStore[T]:
             if key not in self._records or not predicate(deepcopy(self._records[key])):
                 raise NotFoundError("Record not found.")
             del self._records[key]
+            self._changed(key)
