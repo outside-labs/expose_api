@@ -4,6 +4,10 @@ Turn ordinary typed dataclasses into JSON applications. Native ASGI, generated
 CRUD, and a standard-library development runner, with **no runtime dependencies**.
 Python 3.14+ is required.
 
+The adopted [resource event profile](docs/events.md) specifies bounded native
+ASGI subscriptions, current-record access checks and committed-state recovery.
+Its implementation is tracked by WS-01/02 and their focused child issues.
+
 The optional [identity and record access profile](docs/access.md) supports
 caller-owned authentication and atomic value policies. Existing `authorize`
 callbacks provide operation-level access; select `record_policy` explicitly
