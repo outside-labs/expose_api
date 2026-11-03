@@ -106,6 +106,17 @@ class PersistentSubscriptionTests(unittest.IsolatedAsyncioTestCase):
                 if event["value"]["title"] == title:
                     return event
 
+    async def closed_after(self, socket, baseline):
+        # An already authorized snapshot can be in flight when access changes.
+        async with asyncio.timeout(3):
+            while True:
+                event = await socket.next()
+                if event["type"] == "websocket.close":
+                    self.assertEqual(event["code"], 1008)
+                    return
+                self.assertEqual(event["type"], "snapshot")
+                self.assertEqual(event["value"], baseline)
+
     async def test_other_process_delivers_to_independent_subscribers_after_commit(self):
         first, second = await self.socket(), await self.socket(subject="second")
         baseline, _ = await first.next(), await second.next()
@@ -129,9 +140,9 @@ class PersistentSubscriptionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_transfer_revokes_old_tenant_and_new_tenant_gets_only_current_projection(self):
         socket = await self.socket()
-        await socket.next()
+        baseline = await socket.next()
         await self.writer("New owner", "b")
-        self.assertEqual(await socket.next(), {"type": "websocket.close", "code": 1008})
+        await self.closed_after(socket, baseline["value"])
         self.principals["second"] = Principal("second", "b")
         fresh = await self.socket(subject="second")
         self.assertEqual((await fresh.next())["value"], {"id": "a", "title": "New owner"})
@@ -148,9 +159,9 @@ class PersistentSubscriptionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_deletion_closes_and_permanent_storage_key_cannot_be_recreated(self):
         socket = await self.socket()
-        await socket.next()
+        baseline = await socket.next()
         await self.writer("delete")
-        self.assertEqual((await socket.next())["code"], 1008)
+        await self.closed_after(socket, baseline["value"])
         with self.assertRaises(ConflictError):
             await self.store.create("a", Note("a", "a", "Recreated"))
 
@@ -215,6 +226,6 @@ class PersistentSubscriptionTests(unittest.IsolatedAsyncioTestCase):
         finally:
             release.set()
         await mutation
-        update = await socket.next()
+        update = await self.snapshot_named(socket, "Committed after release")
         self.assertEqual(update["value"]["title"], "Committed after release")
         self.assertNotEqual(update["cursor"], initial["cursor"])
