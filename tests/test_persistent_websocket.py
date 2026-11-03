@@ -69,11 +69,11 @@ class PersistentSubscriptionTests(unittest.IsolatedAsyncioTestCase):
         self.principals = {"first": Principal("first", "a"), "second": Principal("second", "a")}
         self.app, self.resource = self.build(self.store)
 
-    def build(self, store):
+    def build(self, store, *, send_timeout=0.1):
         app = App(authenticate=lambda req: self.principals.get(req.header("x-subject") or "first"), auth_challenge="Custom")
         resource = app.include(Note, store=store, path="/notes", authorize=lambda req: True,
                                record_policy=lambda p, op, value: p.tenant == value.tenant)
-        register(app, resource, pending_limit=2)
+        register(app, resource, pending_limit=2, send_timeout=send_timeout)
         return app, resource
 
     async def socket(self, *, app=None, cursor=None, subject="first", send=None):
@@ -185,7 +185,10 @@ class PersistentSubscriptionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_bounded_pending_changes_resync_after_a_held_snapshot(self):
         held, release = asyncio.Event(), asyncio.Event()
-        socket = Socket(self.app)
+        # This acceptance deliberately holds send across three SQLite writes.
+        # Keep it independent of the separate short send-timeout acceptance.
+        app, _ = self.build(self.store, send_timeout=5.0)
+        socket = Socket(app)
         first = True
         async def send(event):
             nonlocal first
@@ -204,7 +207,7 @@ class PersistentSubscriptionTests(unittest.IsolatedAsyncioTestCase):
                 await self.resource.update("a", {"title": str(i)})
         finally:
             release.set()
-        await socket.next()
+        self.assertEqual((await socket.next())["type"], "snapshot")
         self.assertEqual(await socket.next(), {"v": 1, "type": "resync"})
         self.assertEqual((await socket.next())["value"]["title"], "2")
 
