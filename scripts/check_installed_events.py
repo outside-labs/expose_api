@@ -27,7 +27,7 @@ def main():
     suite = unittest.TestSuite(loader.discover(str(args.tests), pattern=pattern) for pattern in (
         "test_events.py", "test_websocket.py", "test_backpack*.py", "test*access.py", "test_persistent_websocket.py"))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    receipt = {"profile": "backpack-events-v1", "python": platform.python_version(), "os": platform.system(),
+    receipt = {"profile": "backpack-events-v1", "python": platform.python_version(), "os": platform.system(), "machine": platform.machine(),
                "package_version": expose_api.__version__, "backend_commit": backend,
                "enforce_type_version": metadata.version("enforce-type"), "tests": result.testsRun,
                "skipped": len(result.skipped), "failures": len(result.failures), "errors": len(result.errors),
