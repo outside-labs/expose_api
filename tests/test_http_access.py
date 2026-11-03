@@ -106,6 +106,7 @@ class HTTPAccessTests(unittest.IsolatedAsyncioTestCase):
                     record_policy=lambda principal, op, value: True, scan_limit=1)
         response = await request(app)
         self.assertEqual((response.status, response.json["error"]["code"]), (503, "access_scan"))
+        self.assertEqual(response.headers[b"cache-control"], b"no-store")
         self.assertNotIn("Initial", response.body.decode())
         spec = self.app.openapi()
         get = spec["paths"]["/notes"]["get"]
@@ -122,6 +123,37 @@ class HTTPAccessTests(unittest.IsolatedAsyncioTestCase):
         app = App(authenticate=unexpected, auth_challenge="Bearer")
         app.include(Note, store=MemoryStore(), authorize=lambda req: req.principal is None)
         self.assertEqual((await request(app)).status, 200)
+        self.assertNotIn(b"cache-control", (await request(app)).headers)
+
+    async def test_protected_records_and_errors_cannot_be_cached(self):
+        cases = [
+            ({}, 200),
+            ({"method": "HEAD"}, 200),
+            ({"method": "OPTIONS", "token": None}, 204),
+            ({"method": "POST", "data": {"id": "new", "tenant": "a"}}, 201),
+            ({"method": "PATCH", "path": "/notes/new", "data": {"title": "Changed"}}, 200),
+            ({"method": "DELETE", "path": "/notes/new"}, 204),
+            ({"token": None}, 401),
+            ({"method": "POST", "data": {"id": "denied", "tenant": "b"}}, 403),
+            ({"path": "/notes/b"}, 404),
+            ({"method": "PUT"}, 405),
+            ({"method": "POST", "data": {}}, 422),
+            ({"method": "POST", "body": b"invalid"}, 415),
+        ]
+        for kwargs, expected in cases:
+            with self.subTest(kwargs=kwargs):
+                response = await self.call(**kwargs)
+                self.assertEqual(response.status, expected)
+                self.assertEqual(response.headers[b"cache-control"], b"no-store")
+        self.app.authenticate = lambda req: "invalid verifier result"
+        with self.assertLogs("expose_api", level="ERROR"):
+            internal = await self.call()
+        self.assertEqual(internal.status, 500)
+        self.assertEqual(internal.headers[b"cache-control"], b"no-store")
+        spec = self.app.openapi()
+        for operation in spec["paths"]["/notes"].values():
+            for response in operation["responses"].values():
+                self.assertEqual(response["headers"]["Cache-Control"]["schema"], {"const": "no-store"})
 
     def test_configuration_rejects_incomplete_or_invalid_authentication(self):
         for kwargs in ({"authenticate": lambda req: None}, {"auth_challenge": "Bearer"},

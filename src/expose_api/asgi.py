@@ -58,6 +58,11 @@ class _Mount:
     scan_limit: int
 
 
+@dataclass(slots=True)
+class _RequestState:
+    protected: bool = False
+
+
 @asynccontextmanager
 async def _empty_lifespan(app):
     yield
@@ -167,8 +172,9 @@ class App:
             raise ProtocolError("Unsupported ASGI scope type.")
         scope = dict(scope)
         scope["headers"] = tuple(scope.get("headers", ()))
+        state = _RequestState()
         try:
-            response = await self._dispatch(scope, receive)
+            response = await self._dispatch(scope, receive, state)
         except _Disconnected:
             return
         except ProtocolError:
@@ -193,10 +199,12 @@ class App:
             logger.error("Unhandled application error (%s).", type(exc).__name__)
             response = _error(500, "internal", "Internal server error.")
         status, headers, body = response
+        if state.protected:
+            headers = [*headers, (b"cache-control", b"no-store")]
         await send({"type": "http.response.start", "status": status, "headers": headers})
         await send({"type": "http.response.body", "body": b"" if scope["method"] == "HEAD" else body})
 
-    async def _dispatch(self, scope, receive):
+    async def _dispatch(self, scope, receive, state):
         path, root = scope["path"], scope.get("root_path", "").rstrip("/")
         if root and (path == root or path.startswith(root + "/")):
             path = path[len(root):] or "/"
@@ -213,6 +221,7 @@ class App:
                 break
         else:
             raise _HTTPError(404, "not_found", "Route not found.")
+        state.protected = mount.record_policy is not None
         enabled = {method: operation for method, operation in choices.items() if operation in mount.operations}
         if not enabled:
             raise _HTTPError(404, "not_found", "Route not found.")

@@ -84,6 +84,9 @@ HTTP errors contain fixed messages and value-free issue paths/codes. Policies,
 principals and credentials never appear in generated OpenAPI. Documentation
 marks protected operations and their actual 401/403/404/503 behavior without
 inventing an OAuth flow. Verifier failures never turn into anonymous success.
+Every response for a registered record-policy route carries
+`Cache-Control: no-store`, including HEAD, OPTIONS and failed requests, so
+identity-dependent records and errors are not reused by HTTP caches.
 
 This contract covers HTTP. WebSocket subscription authorization, revalidation
 and commit-before-delivery remain WS-01/WS-02 work. Authentication does not select
