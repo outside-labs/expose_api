@@ -105,6 +105,7 @@ class TabularProfile:
                         or any(type(name) is not str or name not in self._by_id or not self._by_id[name].searchable for name in fields)
                         or len(set(fields)) != len(fields)):
                     raise ValueError
+                term.encode("utf-8")
                 search = dict(fields=sorted(fields), term=term) if term else None
             cursor = data.get("cursor")
             if cursor is not None and (type(cursor) is not str or not 1 <= len(cursor) <= 16384):

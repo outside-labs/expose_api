@@ -77,6 +77,7 @@ class TabularHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([row["key"] for row in found.json["rows"]], ["e"])
         for data in [{"search": {"fields": ["owner"], "term": "alice"}}, {"order": [{"column_id": "owner", "descending": False}]},
                      {"columns": ["owner"]}, {"columns": ["title", "title"]}, {"limit": True}, {"search": {"fields": ["rank"], "term": "1"}},
+                     {"search": {"fields": ["title"], "term": "\ud800"}},
                      {"filters": [{"column_id": "rank", "operator": "eq", "value": True}]}, {"extra": "private"}]:
             response = await self.query(data)
             self.assertEqual(response.status, 400, response.body)

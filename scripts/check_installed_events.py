@@ -21,7 +21,7 @@ def main():
     assert Path(expose_api.__file__).is_relative_to(Path(sys.prefix))
     assert Path(backpack_store.__file__).is_relative_to(Path(sys.prefix))
     backend = json.loads(metadata.distribution("backpack-store").read_text("direct_url.json"))["vcs_info"]["commit_id"]
-    assert backend == "99a5fdee1e79e0eee9abde4be533d4ec2586120d"
+    assert backend == "9a691aa551bf7fb42134168452bbdb2e1d454928"
     assert metadata.version("enforce-type") == "0.1.0"
     loader = unittest.TestLoader()
     suite = unittest.TestSuite(loader.discover(str(args.tests), pattern=pattern) for pattern in (
