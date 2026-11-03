@@ -1,6 +1,7 @@
 """Small event-level test driver; no networking or third-party client."""
 
 import json
+import asyncio
 from dataclasses import dataclass
 
 
@@ -18,7 +19,7 @@ class Result:
 
 
 async def request(app, path="/notes", method="GET", *, data=None, body=None, headers=None,
-                  events=None, root_path="", query=b""):
+                  events=None, root_path="", query=b"", hold=False):
     headers = list(headers or [])
     if data is not None:
         body = json.dumps(data).encode()
@@ -28,6 +29,8 @@ async def request(app, path="/notes", method="GET", *, data=None, body=None, hea
     async def receive():
         nonlocal reads
         reads += 1
+        if hold and not pending:
+            await asyncio.Future()
         return pending.pop(0) if pending else {"type": "http.disconnect"}
     async def send(event):
         messages.append(event)

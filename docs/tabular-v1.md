@@ -107,3 +107,16 @@ model values or SQL. OpenAPI must describe only actually implemented routes,
 declared visible column types, bounded request/page shapes, credential security
 and these public outcomes. This contract document does not add runtime routes,
 an identity provider, package publication or deployment.
+
+## Read-only implementation
+
+Register `app.tabular(resource, table_id="work_items", schema_version="1",
+application_scope="my-application", columns=[TableColumn("title", "title",
+"Title", sortable=True, searchable=True)])` after `App.include`. The optional
+Backpack profile pins source `99a5fdee1e79e0eee9abde4be533d4ec2586120d`.
+The registered Store must expose the selected public query columns. There is
+no implicit schema inference, write route or writable capability. Query
+responses reauthorize candidates inside one owned transaction, retain stable
+keys/revisions separately from projection and never expose hidden counts.
+Disconnected/canceled work refuses its response; owned storage close drains any
+already-dispatched read. OpenAPI contains only the implemented schema/query routes.
