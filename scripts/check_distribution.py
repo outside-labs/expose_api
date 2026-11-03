@@ -48,20 +48,27 @@ def wheel_files(path, version, project):
     return result
 
 
-def installed(artifact, work, name, version):
+def installed(artifact, work, name, version, *, requirements=None):
     environment = work / name
     venv.EnvBuilder(with_pip=False).create(environment)
     python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     run("uv", "pip", "install", "--python", python, "--no-deps", artifact, cwd=work)
+    if requirements is not None:
+        run("uv", "pip", "install", "--python", python, "-r", requirements, cwd=work)
     probe = (
         "import importlib.metadata as m, pathlib, sys, expose_api; "
         f"assert m.version('expose-api') == expose_api.__version__ == {version!r}; "
         "assert all('extra ==' in r for r in m.requires('expose-api')); "
         "assert pathlib.Path(expose_api.__file__).is_relative_to(pathlib.Path(sys.prefix)); "
         "assert pathlib.Path(expose_api.__file__).with_name('py.typed').is_file(); "
-        "assert not any(k in sys.modules for k in ('starlette','fastapi','pydantic','hidden_moves','backpack'))"
+        "assert not any(k in sys.modules for k in ('starlette','fastapi','pydantic','hidden_moves','backpack_store','enforce_type'))"
     )
     run(python, "-I", "-c", probe, cwd=work)
+    if requirements is not None:
+        receipt = work / f"{name}.json"
+        run(python, "-I", "-W", "error::ResourceWarning", ROOT / "scripts" / "check_installed_events.py",
+            "--tests", work / "tests", "--receipt", receipt, cwd=work)
+        return json.loads(receipt.read_text(encoding="utf-8"))
     run(python, "-I", "-W", "error::ResourceWarning", "-m", "unittest", "discover", "-s", work / "tests", "-v", cwd=work)
 
 
@@ -69,6 +76,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag")
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--backpack", action="store_true", help="Qualify the locked optional event profile in both artifacts.")
+    parser.add_argument("--receipt-file", type=Path)
     args = parser.parse_args()
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
     version = project["version"]
@@ -104,12 +113,22 @@ def main():
         shutil.copytree(ROOT / "examples", work / "examples", ignore=shutil.ignore_patterns("__pycache__"))
         installed(wheel, work, "wheel-install", version)
         installed(source, work, "source-install", version)
+        profiles = {}
+        if args.backpack:
+            requirements = work / "backpack-requirements.txt"
+            run("uv", "export", "--frozen", "--extra", "backpack", "--no-dev", "--no-emit-project", "--no-hashes",
+                "--output-file", requirements)
+            for label, artifact in (("wheel", wheel), ("source", source)):
+                profiles[label] = installed(artifact, work, f"{label}-backpack", version, requirements=requirements)
         receipts = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in (wheel, source)}
         if args.output_dir:
             args.output_dir.mkdir(parents=True, exist_ok=True)
             for path in (wheel, source):
                 shutil.copy2(path, args.output_dir / path.name)
-        print(json.dumps({"version": version, "sha256": receipts}, indent=2))
+        result = {"version": version, "sha256": receipts, "optional_profiles": profiles}
+        if args.receipt_file:
+            args.receipt_file.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":
