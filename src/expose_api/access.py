@@ -1,6 +1,7 @@
 """Caller-owned immutable identity and synchronous, detached record policies."""
 
 import inspect
+import re
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
@@ -23,6 +24,25 @@ class Principal:
                 or type(self.scopes) is not frozenset or len(self.scopes) > 64
                 or not all(_identifier(scope) for scope in self.scopes)):
             raise ConfigurationError("Principal identifiers and scopes must be bounded immutable strings.")
+
+
+class BearerAuth:
+    """Parse one bounded Authorization header; the caller verifies its token."""
+
+    def __init__(self, verify):
+        if not callable(verify):
+            raise ConfigurationError("Bearer authentication requires a token verifier.")
+        self.verify = verify
+
+    async def __call__(self, request):
+        header = request.header("authorization")
+        if header is None or len(header) > 8192:
+            return None
+        match = re.fullmatch(r"(?i:Bearer) ([A-Za-z0-9._~+/-]+=*)", header)
+        if match is None:
+            return None
+        result = self.verify(match[1])
+        return await result if inspect.isawaitable(result) else result
 
 
 @dataclass(frozen=True, slots=True)

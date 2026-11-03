@@ -4,9 +4,10 @@ Turn ordinary typed dataclasses into JSON applications. Native ASGI, generated
 CRUD, and a standard-library development runner, with **no runtime dependencies**.
 Python 3.14+ is required.
 
-The [identity and record access profile](docs/access.md) adopts caller-owned
-authentication and atomic value policies. Its implementation is tracked by
-AUTH-02/03; existing `authorize` callbacks provide operation-level access only.
+The optional [identity and record access profile](docs/access.md) supports
+caller-owned authentication and atomic value policies. Existing `authorize`
+callbacks provide operation-level access; select `record_policy` explicitly
+to bind a verified principal to record access.
 
 ```python
 from dataclasses import dataclass, field

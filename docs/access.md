@@ -28,6 +28,12 @@ Cookie credentials additionally require a selected CSRF/origin contract. No
 header, cookie or forwarded identity is trusted by default. This is an identity
 integration seam, not an OAuth implementation.
 
+`BearerAuth(verify)` supplies strict, bounded parsing of a single Authorization
+header and invokes a caller-owned sync/async token verifier. Missing, duplicate
+or malformed headers return anonymous failure without invoking the verifier.
+Configure it with `App(authenticate=BearerAuth(verify), auth_challenge="Bearer")`.
+The verifier must return a `Principal` or `None`; tokens are never persisted.
+
 ## Registration and operation authorization
 
 Existing `public=True` mounts and existing operation-only `authorize(request)`
