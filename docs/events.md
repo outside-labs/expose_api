@@ -128,4 +128,32 @@ The initial deployment profile remains one host/local SQLite database, bounded
 writers and process-local sockets. No broker, hosted database, external identity
 provider, package publication or public deployment is selected here.
 
+## Persistent journal selection
+
+Open `BackpackStore` with its usual model/path/namespace/table/type key plus
+`events=256, event_namespace="note_events"`. The event namespace is a distinct
+explicit lowercase identifier (at most 40 characters). It owns
+`app_note_events_state` and `app_note_events_changes` using journal schema v1.
+Every worker must select the same retention, resource table/type key and event
+namespace; incompatible startup fails closed. The resource schema and existing
+payload/revision contracts do not change. Read transactions currently use the
+public write unit of work to pair resource and journal state, so polling must
+be bounded to fit the single-host SQLite writer budget.
+
+To enable events on existing data, stop all writers, make the application's
+verified backup, start all writers with the event profile, and reconnect clients
+for fresh snapshots. Creating the separately owned journal namespace does not
+rewrite resource rows. Older code can still read the resource schema, but must
+not write after enablement: it does not append journal entries. To roll back,
+stop event-enabled workers and clients before restoring the prior application
+profile; restart clients with fresh snapshots when re-enabling events. Do not
+delete journal tables or change retention while writers are running.
+
+The journal rotates a fixed set of registered slots, preserving at most
+`events` change rows and `events + 1` journal key reservations. No historical
+record payloads are stored. Opaque cursors survive graceful worker restart.
+Backpack's existing permanent domain-key reservation means a deleted resource
+key cannot be recreated; MemoryStore permits that case. The stream position has
+a finite exact-integer bound and fails writes on exhaustion rather than wrapping.
+
 Reference: [ASGI WebSocket specification](https://asgi.readthedocs.io/en/stable/specs/www.html#websocket).
