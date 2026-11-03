@@ -5,6 +5,7 @@ import sys
 from tempfile import TemporaryDirectory
 import threading
 import unittest
+from unittest.mock import patch
 
 from expose_api import App, ConflictError, Principal
 from websocket_client import Socket, register
@@ -73,7 +74,7 @@ class PersistentSubscriptionTests(unittest.IsolatedAsyncioTestCase):
         app = App(authenticate=lambda req: self.principals.get(req.header("x-subject") or "first"), auth_challenge="Custom")
         resource = app.include(Note, store=store, path="/notes", authorize=lambda req: True,
                                record_policy=lambda p, op, value: p.tenant == value.tenant)
-        register(app, resource, pending_limit=2, send_timeout=send_timeout)
+        register(app, resource, pending_limit=2, send_timeout=send_timeout, auth_timeout=5.0)
         return app, resource
 
     async def socket(self, *, app=None, cursor=None, subject="first", send=None):
@@ -128,6 +129,15 @@ class PersistentSubscriptionTests(unittest.IsolatedAsyncioTestCase):
         await first.close()
         await self.writer("Again")
         self.assertEqual((await self.snapshot_named(second, "Again"))["value"]["title"], "Again")
+
+    async def test_worker_latency_uses_the_persistent_authentication_budget(self):
+        original = self.store.event_snapshot
+        async def delayed(key):
+            await asyncio.sleep(0.15)
+            return await original(key)
+        with patch.object(self.store, "event_snapshot", delayed):
+            socket = await self.socket()
+            self.assertEqual((await socket.next())["value"], {"id": "a", "title": "Initial"})
 
     async def test_failed_external_transform_does_not_publish_or_advance_cursor(self):
         socket = await self.socket()
