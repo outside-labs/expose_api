@@ -12,10 +12,13 @@ from .stores import AccessStore, Store
 class Resource[T]:
     """Direct Python CRUD. HTTP access policies are enforced by App, not here."""
 
-    def __init__(self, model: type[T], *, store: Store[T], id_field: str = "id"):
+    def __init__(self, model: type[T], *, store: Store[T], id_field: str = "id", schema: ModelSchema[T] | None = None):
         if not isinstance(store, Store):
             raise ConfigurationError("A store must implement the asynchronous Store contract.")
-        self.schema = ModelSchema(model, id_field=id_field)
+        if schema is not None and (not isinstance(schema, ModelSchema) or schema.model is not model
+                                   or schema.id_field != id_field):
+            raise ConfigurationError("Select a ModelSchema with the same model and identity field.")
+        self.schema = ModelSchema(model, id_field=id_field) if schema is None else schema
         self.model, self.store = model, store
         self._access = None
 
@@ -24,7 +27,7 @@ class Resource[T]:
         access = RecordAccess(principal, policy, scan_limit)
         if not isinstance(self.store, AccessStore):
             raise ConfigurationError("Protected resources require atomic AccessStore capabilities.")
-        view = Resource(self.model, store=self.store, id_field=self.schema.id_field)
+        view = Resource(self.model, store=self.store, id_field=self.schema.id_field, schema=self.schema)
         view._access = access
         return view
 
