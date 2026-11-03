@@ -30,7 +30,13 @@ source = { editable = "." }
 backpack = [
     { name = "backpack-store", extra = ["enforce-type"] },
 ]
+enforce-type = [
+    { name = "enforce-type" },
+]
 
 [package.metadata]
-requires-dist = [{ name = "backpack-store", extras = ["enforce-type"], marker = "extra == 'backpack'", git = "https://github.com/outside-labs/backpack.git?rev=54f5a1e883fcc32f8d87cc553dc83dae0434300d" }]
-provides-extras = ["backpack"]
+requires-dist = [
+    { name = "backpack-store", extras = ["enforce-type"], marker = "extra == 'backpack'", git = "https://github.com/outside-labs/backpack.git?rev=54f5a1e883fcc32f8d87cc553dc83dae0434300d" },
+    { name = "enforce-type", marker = "extra == 'enforce-type'", specifier = "==0.1.0" },
+]
+provides-extras = ["enforce-type", "backpack"]

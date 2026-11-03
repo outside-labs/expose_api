@@ -95,7 +95,7 @@ class _Contract:
             ):
                 return
             if is_dataclass(annotation):
-                self.nested[annotation] = _Contract(annotation, active)
+                self.nested[annotation] = type(self)(annotation, active)
                 return
         raise ConfigurationError("Unsupported model annotation.")
 
@@ -217,11 +217,13 @@ class _Contract:
 class ModelSchema[T]:
     """Validate create/patch input, serialize records, and normalize identities."""
 
+    _contract_type = _Contract
+
     def __init__(self, model: type[T], *, id_field: str = "id"):
         if not isinstance(model, type) or not is_dataclass(model):
             raise ConfigurationError("Include a dataclass type.")
         self.model, self.id_field = model, id_field
-        self._contract = _Contract(model, frozenset())
+        self._contract = self._contract_type(model, frozenset())
         identity = self._contract.fields.get(id_field)
         if identity is None or identity.annotation not in (str, int, UUID) or identity.write_only:
             raise ConfigurationError("Identity must be a readable str, int, or UUID field.")
