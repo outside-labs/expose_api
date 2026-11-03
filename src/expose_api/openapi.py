@@ -7,6 +7,7 @@ from typing import Literal, Union, get_args, get_origin
 from uuid import UUID
 
 from .errors import ConfigurationError
+from .access import BearerAuth
 
 
 def _annotation(annotation, contract, mode):
@@ -98,6 +99,10 @@ def document(app, *, version="0.1.0", description=None):
                 codes = {400, 404, 405, 422, 500}
                 if mount.authorize is not None:
                     codes.add(403)
+                if mount.record_policy is not None:
+                    codes.add(401)
+                    if operation == "list":
+                        codes.add(503)
                 if operation in ("create", "update"):
                     codes.update({409, 413, 415})
                 for code in sorted(codes):
@@ -105,6 +110,14 @@ def document(app, *, version="0.1.0", description=None):
                         "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
                 value = {"operationId": f"resource_{index}_{operation}", "responses": responses,
                          "x-access-policy": "callback" if mount.authorize is not None else "public"}
+                if mount.record_policy is not None:
+                    value["x-access-policy"] = "authenticated-record-policy"
+                    value["x-authentication"] = "caller-owned"
+                    if isinstance(app.authenticate, BearerAuth):
+                        value["security"] = [{"BearerAuth": []}]
+                    if operation == "list":
+                        value["x-access-scan-limit"] = mount.scan_limit
+                    value["responses"]["401"]["headers"] = {"WWW-Authenticate": {"schema": {"type": "string"}}}
                 parameters = []
                 if suffix:
                     parameters.append({"name": "identity", "in": "path", "required": True,
@@ -135,4 +148,7 @@ def document(app, *, version="0.1.0", description=None):
                                              "Allow": {"schema": {"type": "string"}}}}}}
                 paths[mount.path + suffix] = operations
     schemas["Error"] = ERROR_SCHEMA
-    return deepcopy({"openapi": "3.1.0", "info": info, "paths": paths, "components": {"schemas": schemas}})
+    components = {"schemas": schemas}
+    if isinstance(app.authenticate, BearerAuth) and any(mount.record_policy is not None for mount in app._mounts):
+        components["securitySchemes"] = {"BearerAuth": {"type": "http", "scheme": "bearer"}}
+    return deepcopy({"openapi": "3.1.0", "info": info, "paths": paths, "components": components})

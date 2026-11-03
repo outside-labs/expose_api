@@ -38,6 +38,7 @@ jobs:
         run: |
           uv run --frozen python -c "from expose_api.backpack import BackpackStore"
           uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p test_backpack.py -v
+          uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p 'test*access.py' -v
 
   distribution:
     name: Build and installed distributions

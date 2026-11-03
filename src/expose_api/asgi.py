@@ -8,10 +8,11 @@ import re
 import sys
 from collections.abc import Callable, Iterable
 from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from urllib.parse import parse_qsl, quote
 
-from .errors import ConfigurationError, ConflictError, NotFoundError, RevisionConflictError, ValidationError
+from .access import Principal
+from .errors import AccessDeniedError, AccessScanError, ConfigurationError, ConflictError, NotFoundError, RevisionConflictError, ValidationError
 from .models import MAX_DEPTH
 from .resources import Resource
 
@@ -40,6 +41,7 @@ class Request:
     model: type
     operation: str
     identity: str | None
+    principal: Principal | None = None
 
     def header(self, name: str) -> str | None:
         values = [v.decode("latin-1") for k, v in self.scope.get("headers", ()) if k.lower() == name.lower().encode("ascii")]
@@ -52,6 +54,8 @@ class _Mount:
     resource: Resource
     operations: frozenset[str]
     authorize: Callable | None
+    record_policy: Callable | None
+    scan_limit: int
 
 
 @asynccontextmanager
@@ -98,9 +102,17 @@ def _check_json(value):
 class App:
     """A dependency-free ASGI app. Include resources before the first ASGI call."""
 
-    def __init__(self, *, title: str = "Expose API", max_body_size: int = 1024 * 1024, lifespan=None):
+    def __init__(self, *, title: str = "Expose API", max_body_size: int = 1024 * 1024, lifespan=None,
+                 authenticate=None, auth_challenge: str | None = None):
         if type(max_body_size) is not int or max_body_size < 1:
             raise ConfigurationError("max_body_size must be a positive integer.")
+        if authenticate is not None:
+            if (not callable(authenticate) or type(auth_challenge) is not str or len(auth_challenge) > 512
+                    or not re.fullmatch(r"[A-Za-z][A-Za-z0-9!#$%&'*+.^_`|~-]*(?: [ -~]+)?", auth_challenge)):
+                raise ConfigurationError("Authentication requires a callback and a bounded ASCII challenge.")
+        elif auth_challenge is not None:
+            raise ConfigurationError("An authentication challenge requires a callback.")
+        self.authenticate, self.auth_challenge = authenticate, auth_challenge
         self.title, self.max_body_size = title, max_body_size
         self.state: dict = {}
         self._lifespan_factory = lifespan or _empty_lifespan
@@ -118,12 +130,17 @@ class App:
         return document(self, version=version, description=description)
 
     def include[T](self, model: type[T], *, store, path: str | None = None, id_field: str = "id",
-                   operations: Iterable[str] = OPERATIONS, public: bool = False, authorize=None) -> Resource[T]:
+                   operations: Iterable[str] = OPERATIONS, public: bool = False, authorize=None,
+                   record_policy=None, scan_limit: int = 10000) -> Resource[T]:
         if self._frozen:
             raise ConfigurationError("Register resources before serving the application.")
         if type(public) is not bool or (public and authorize is not None) or (not public and not callable(authorize)):
             raise ConfigurationError("Choose public=True or an authorization callback.")
         resource = Resource(model, store=store, id_field=id_field)
+        if record_policy is not None:
+            if public or self.authenticate is None:
+                raise ConfigurationError("Record policies require explicit authentication and operation authorization.")
+            resource.for_principal(Principal("configuration"), record_policy, scan_limit=scan_limit)
         if path is None:
             path = "/" + re.sub(r"(?<!^)(?=[A-Z])", "_", model.__name__).lower() + "s"
         if type(path) is not str or not re.fullmatch(r"/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", path):
@@ -138,7 +155,7 @@ class App:
                 raise ConfigurationError("Each resource requires its own model and store.")
             if path == mount.path or path.startswith(mount.path + "/") or mount.path.startswith(path + "/"):
                 raise ConfigurationError("Resource paths cannot overlap.")
-        self._mounts.append(_Mount(path, resource, selected, authorize))
+        self._mounts.append(_Mount(path, resource, selected, authorize, record_policy, scan_limit))
         return resource
 
     async def __call__(self, scope, receive, send):
@@ -161,6 +178,10 @@ class App:
         except ValidationError as exc:
             response = _error(422, "validation", "Data does not match the model.",
                               details=[issue.as_dict() for issue in exc.issues])
+        except AccessDeniedError:
+            response = _error(403, "forbidden", "Operation not permitted.")
+        except AccessScanError:
+            response = _error(503, "access_scan", "Visible page exceeds the scan budget.")
         except NotFoundError:
             response = _error(404, "not_found", "Record not found.")
         except RevisionConflictError:
@@ -208,8 +229,19 @@ class App:
                 identity = mount.resource.schema.parse_id(identity)
             except ValidationError:
                 raise _HTTPError(400, "identity", "Invalid record identity.") from None
+        context = Request(dict(scope), mount.resource.model, operation, identity)
+        if mount.record_policy is not None:
+            principal = self.authenticate(context)
+            if inspect.isawaitable(principal):
+                principal = await principal
+            if principal is None:
+                raise _HTTPError(401, "unauthenticated", "Authentication required.",
+                                 headers=((b"www-authenticate", self.auth_challenge.encode("ascii")),))
+            if type(principal) is not Principal:
+                raise ConfigurationError("Authentication must return a Principal or None.")
+            context = replace(context, principal=principal)
         if mount.authorize is not None:
-            permitted = mount.authorize(Request(dict(scope), mount.resource.model, operation, identity))
+            permitted = mount.authorize(context)
             if inspect.isawaitable(permitted):
                 permitted = await permitted
             if type(permitted) is not bool:
@@ -218,6 +250,8 @@ class App:
                 raise _HTTPError(403, "forbidden", "Operation not permitted.")
         pagination = self._query(scope.get("query_string", b""), operation)
         resource = mount.resource
+        if mount.record_policy is not None:
+            resource = resource.for_principal(context.principal, mount.record_policy, scan_limit=mount.scan_limit)
         if operation == "list":
             values = await resource.list(**pagination)
             return _response(200, [self._dump(resource, value) for value in values])
