@@ -1,5 +1,10 @@
 # expose-api
 
+Resources can explicitly select a `ModelSchema` subclass with
+`App.include(..., schema=selected_schema)` or `Resource(..., schema=...)`.
+The schema must use the same model and `id_field`; protected principal views
+retain that selection. Omitting it keeps the built-in model contract.
+
 Turn ordinary typed dataclasses into JSON applications. Native ASGI, generated
 CRUD, and a standard-library development runner, with **no runtime dependencies**.
 Python 3.14+ is required.

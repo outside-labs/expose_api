@@ -147,12 +147,12 @@ class App:
 
     def include[T](self, model: type[T], *, store, path: str | None = None, id_field: str = "id",
                    operations: Iterable[str] = OPERATIONS, public: bool = False, authorize=None,
-                   record_policy=None, scan_limit: int = 10000) -> Resource[T]:
+                   record_policy=None, scan_limit: int = 10000, schema=None) -> Resource[T]:
         if self._frozen:
             raise ConfigurationError("Register resources before serving the application.")
         if type(public) is not bool or (public and authorize is not None) or (not public and not callable(authorize)):
             raise ConfigurationError("Choose public=True or an authorization callback.")
-        resource = Resource(model, store=store, id_field=id_field)
+        resource = Resource(model, store=store, id_field=id_field, schema=schema)
         if record_policy is not None:
             if public or self.authenticate is None:
                 raise ConfigurationError("Record policies require explicit authentication and operation authorization.")
