@@ -11,7 +11,7 @@ from .models import ModelSchema
 try:
     from backpack_store import (
         AlreadyExistsError, AsyncApplicationStore, CodecError, ConstraintError,
-        NotFoundError as MissingRow, RevisionConflictError as StaleRow, ValidationError as InvalidRow,
+        NotFoundError as MissingRow, RevisionConflictError as StaleRow, TransactionError, ValidationError as InvalidRow,
     )
     from backpack_store.enforce_type_codec import EnforceTypeCodec
 except ImportError:
@@ -95,19 +95,31 @@ class BackpackStore[T]:
         self._revision(expected_revision)
         if not callable(transform) or inspect.iscoroutinefunction(transform):
             raise ValueError("Storage transforms must be synchronous.")
+        validation_issues = []
         def update(model):
             row = model.get(key)
             if expected_revision is not None and row.revision != expected_revision:
                 raise StaleRow("Record changed after the expected revision.")
             def checked(value):
-                result = transform(value)
-                if inspect.isawaitable(result):
-                    if inspect.iscoroutine(result):
-                        result.close()
-                    raise InvalidRow("Storage transforms must be synchronous.")
-                return self._value(key, result)
+                try:
+                    result = transform(value)
+                    if inspect.isawaitable(result):
+                        if inspect.iscoroutine(result):
+                            result.close()
+                        raise InvalidRow("Storage transforms must be synchronous.")
+                    return self._value(key, result)
+                except ValidationError as error:
+                    # The storage boundary redacts arbitrary callback failures.
+                    # Retain only the API's value-free issues until rollback finishes.
+                    validation_issues.extend(error.issues)
+                    raise
             return model.update(key, expected_revision=row.revision, transform=checked)
-        return await self._run(update, transactional=True)
+        try:
+            return await self._run(update, transactional=True)
+        except TransactionError:
+            if validation_issues:
+                raise ValidationError(*validation_issues) from None
+            raise
 
     async def delete(self, key: str) -> None:
         await self.delete_checked(key)
