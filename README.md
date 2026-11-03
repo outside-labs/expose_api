@@ -210,3 +210,7 @@ backend to `54f5a1e883fcc32f8d87cc553dc83dae0434300d` and uses published
 explicit `model`, database path, `namespace`, `table` and `type_key`, then close
 with `await store.aclose()` during application shutdown. See the persistence
 profile for the supported scalar models and cancellation reconciliation.
+
+`app.openapi(version="1.0")` returns a detached OpenAPI 3.1.0 description of
+registered routes and their runtime model contracts. See [OpenAPI generation](docs/openapi.md)
+for customization, field visibility and schema limits.
