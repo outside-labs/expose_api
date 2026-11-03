@@ -187,7 +187,7 @@ class ASGITests(unittest.IsolatedAsyncioTestCase):
             await request(self.app, method="POST", headers=[(b"content-type", b"application/json")],
                           events=[{"type": "websocket.receive"}])
         with self.assertRaises(ProtocolError):
-            await self.app({"type": "websocket"}, None, None)
+            await self.app({"type": "unknown"}, None, None)
 
     async def test_cancellation_propagates_and_send_errors_do_not_restart_response(self):
         entered = asyncio.Event()
