@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = {"__init__.py", "asgi.py", "errors.py", "models.py", "py.typed", "resources.py", "server.py", "stores.py"}
+MODULES = {"__init__.py", "asgi.py", "backpack.py", "errors.py", "models.py", "py.typed", "resources.py", "server.py", "stores.py"}
 
 
 def run(*args, cwd=ROOT):
@@ -28,7 +28,10 @@ def metadata(raw, project):
                           ("Requires-Python", ">=3.14"), ("Summary", project["description"]),
                           ("Description-Content-Type", "text/markdown")):
         assert message.get_all(key) == [expected], (key, message.get_all(key))
-    assert not message.get_all("Requires-Dist"), "Runtime dependencies are forbidden."
+    requirements = message.get_all("Requires-Dist") or []
+    assert len(requirements) == 1 and 'extra == "backpack"' in requirements[0]
+    assert "54f5a1e883fcc32f8d87cc553dc83dae0434300d" in requirements[0]
+    assert message.get_all("Provides-Extra") == ["backpack"]
     assert message.get_payload().strip() == (ROOT / "README.md").read_text().strip()
 
 
@@ -53,7 +56,7 @@ def installed(artifact, work, name, version):
     probe = (
         "import importlib.metadata as m, pathlib, sys, expose_api; "
         f"assert m.version('expose-api') == expose_api.__version__ == {version!r}; "
-        "assert not m.requires('expose-api'); "
+        "assert all('extra ==' in r for r in m.requires('expose-api')); "
         "assert pathlib.Path(expose_api.__file__).is_relative_to(pathlib.Path(sys.prefix)); "
         "assert pathlib.Path(expose_api.__file__).with_name('py.typed').is_file(); "
         "assert not any(k in sys.modules for k in ('starlette','fastapi','pydantic','hidden_moves','backpack'))"

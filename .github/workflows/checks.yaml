@@ -32,6 +32,12 @@ jobs:
           python-version: '3.14'
       - run: uv sync --locked
       - run: uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -v
+      - name: Install qualified optional Backpack profile
+        run: uv sync --locked --extra backpack
+      - name: Qualify optional Store and HTTP behavior
+        run: |
+          uv run --frozen python -c "from expose_api.backpack import BackpackStore"
+          uv run --frozen python -W error::ResourceWarning -m unittest discover -s tests -p test_backpack.py -v
 
   distribution:
     name: Build and installed distributions

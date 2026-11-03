@@ -23,8 +23,8 @@ No model is imported from stored data.
 - `get`, `list` and transforms return detached validated values. Missing keys
   map to API `NotFoundError`; backend/codec errors never disclose submitted data.
 - `list(offset, limit)` uses ascending immutable domain-key order, with the
-  existing API bounds (nonnegative offset, limit 1–1000). Each page runs in one
-  read transaction; separate pages see current committed state and can shift
+  existing API limit bounds (1–1000). Each page runs in one serialized
+  transaction; separate pages see current committed state and can shift
   under concurrent insertions/deletions. Offset work is bounded at 10,000.
 - `update` fetches the current row and runs the synchronous transform inside one
   `BEGIN IMMEDIATE` unit of work, then replaces using its current revision.

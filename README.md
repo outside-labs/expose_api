@@ -202,3 +202,11 @@ OpenAPI, WebSocket and optional Hidden Moves/Backpack/CLI integrations. Version
 The [SQLite persistence profile](docs/persistence.md) defines the optional
 Backpack Store adapter's model intersection, atomicity, cancellation, migration
 and process ownership requirements. Persistent integration remains explicit.
+
+Install this checkout with `uv sync --extra backpack` to use
+`from expose_api.backpack import BackpackStore`. This extra pins the unreleased
+backend to `54f5a1e883fcc32f8d87cc553dc83dae0434300d` and uses published
+`enforce-type==0.1.x`; the published Expose API 0.1.0 has no adapter. Open with
+explicit `model`, database path, `namespace`, `table` and `type_key`, then close
+with `await store.aclose()` during application shutdown. See the persistence
+profile for the supported scalar models and cancellation reconciliation.

@@ -9,6 +9,9 @@ authors = [
 requires-python = ">=3.14"
 dependencies = []
 
+[project.optional-dependencies]
+backpack = ["backpack-store[enforce-type] @ git+https://github.com/outside-labs/backpack.git@54f5a1e883fcc32f8d87cc553dc83dae0434300d"]
+
 [project.urls]
 Source = "https://github.com/outside-labs/expose_api"
 Issues = "https://github.com/outside-labs/expose_api/issues"

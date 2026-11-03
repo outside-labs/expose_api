@@ -1,8 +1,36 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
+
+[[package]]
+name = "backpack-store"
+version = "0.1.0"
+source = { git = "https://github.com/outside-labs/backpack.git?rev=54f5a1e883fcc32f8d87cc553dc83dae0434300d#54f5a1e883fcc32f8d87cc553dc83dae0434300d" }
+
+[package.optional-dependencies]
+enforce-type = [
+    { name = "enforce-type" },
+]
+
+[[package]]
+name = "enforce-type"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c2/3b/16c74a0955ccfabe3f9d1df47bba3ba0a3375b7bcca095c207069df4d8b2/enforce_type-0.1.0.tar.gz", hash = "sha256:5ac74c4221008eb02448518440b466152611fed099b85c1c7e632da0f86b3fd8", size = 9502, upload-time = "2026-10-19T19:24:37.209Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/98/c5/45d52a53416d8cf3580b552a619e6bc0ae0b3b2000ccf1269aa0157c711b/enforce_type-0.1.0-py3-none-any.whl", hash = "sha256:ece2a7a86a9ac6ee337af58ce5eab85acbc10900ccb5e4e4dd53392b1773e075", size = 11908, upload-time = "2026-10-19T19:24:36.138Z" },
+]
 
 [[package]]
 name = "expose-api"
 version = "0.1.0"
 source = { editable = "." }
+
+[package.optional-dependencies]
+backpack = [
+    { name = "backpack-store", extra = ["enforce-type"] },
+]
+
+[package.metadata]
+requires-dist = [{ name = "backpack-store", extras = ["enforce-type"], marker = "extra == 'backpack'", git = "https://github.com/outside-labs/backpack.git?rev=54f5a1e883fcc32f8d87cc553dc83dae0434300d" }]
+provides-extras = ["backpack"]
