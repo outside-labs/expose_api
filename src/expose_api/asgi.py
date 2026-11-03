@@ -125,6 +125,17 @@ class App:
         self._mounts: list[_Mount] = []
         self._frozen = False
         self._sockets = EventSockets(self)
+        self._tables = {}
+
+    def tabular(self, resource, **options):
+        """Opt into the bounded read-only registered tabular profile."""
+        from .tabular import TabularProfile
+        mount = next((mount for mount in self._mounts if mount.resource is resource), None)
+        if self._frozen or mount is None or mount.path in self._tables:
+            raise ConfigurationError("Register one tabular profile on an included resource before serving.")
+        profile = TabularProfile(mount, **options)
+        self._tables[mount.path] = profile
+        return profile
 
     def subscribe(self, resource, **options):
         """Explicitly enable bounded, protected single-record WebSockets."""
@@ -222,6 +233,9 @@ class App:
         path, root = scope["path"], scope.get("root_path", "").rstrip("/")
         if root and (path == root or path.startswith(root + "/")):
             path = path[len(root):] or "/"
+        for prefix, profile in self._tables.items():
+            if path.startswith(prefix + "/_table/"):
+                return await profile.dispatch(self, path[len(prefix + "/_table/"):], scope, receive, state)
         for mount in self._mounts:
             if path == mount.path:
                 identity = None
@@ -252,6 +266,27 @@ class App:
                 identity = mount.resource.schema.parse_id(identity)
             except ValidationError:
                 raise _HTTPError(400, "identity", "Invalid record identity.") from None
+        context = await self._context(mount, scope, operation, identity)
+        pagination = self._query(scope.get("query_string", b""), operation)
+        resource = mount.resource
+        if mount.record_policy is not None:
+            resource = resource.for_principal(context.principal, mount.record_policy, scan_limit=mount.scan_limit)
+        if operation == "list":
+            values = await resource.list(**pagination)
+            return _response(200, [self._dump(resource, value) for value in values])
+        if operation == "get":
+            return _response(200, self._dump(resource, await resource.get(identity)))
+        if operation == "delete":
+            await resource.delete(identity)
+            return _response(204)
+        data = await self._body(scope, receive)
+        if operation == "create":
+            value = await resource.create(data)
+            location = quote(root + mount.path, safe="/") + "/" + quote(resource.schema.key(value), safe="")
+            return _response(201, self._dump(resource, value), ((b"location", location.encode("ascii")),))
+        return _response(200, self._dump(resource, await resource.update(identity, data)))
+
+    async def _context(self, mount, scope, operation, identity):
         context = Request(dict(scope), mount.resource.model, operation, identity)
         if mount.record_policy is not None:
             principal = self.authenticate(context)
@@ -271,24 +306,7 @@ class App:
                 raise ConfigurationError("Authorization callbacks must return a boolean.")
             if not permitted:
                 raise _HTTPError(403, "forbidden", "Operation not permitted.")
-        pagination = self._query(scope.get("query_string", b""), operation)
-        resource = mount.resource
-        if mount.record_policy is not None:
-            resource = resource.for_principal(context.principal, mount.record_policy, scan_limit=mount.scan_limit)
-        if operation == "list":
-            values = await resource.list(**pagination)
-            return _response(200, [self._dump(resource, value) for value in values])
-        if operation == "get":
-            return _response(200, self._dump(resource, await resource.get(identity)))
-        if operation == "delete":
-            await resource.delete(identity)
-            return _response(204)
-        data = await self._body(scope, receive)
-        if operation == "create":
-            value = await resource.create(data)
-            location = quote(root + mount.path, safe="/") + "/" + quote(resource.schema.key(value), safe="")
-            return _response(201, self._dump(resource, value), ((b"location", location.encode("ascii")),))
-        return _response(200, self._dump(resource, await resource.update(identity, data)))
+        return context
 
     @staticmethod
     def _dump(resource, value):
@@ -317,7 +335,8 @@ class App:
         except (ValueError, UnicodeError):
             raise _HTTPError(400, "query", "Invalid query parameters.") from None
 
-    async def _body(self, scope, receive):
+    async def _body(self, scope, receive, *, max_size=None):
+        max_size = self.max_body_size if max_size is None else min(self.max_body_size, max_size)
         headers = scope.get("headers", ())
         content_types = [v.decode("latin-1") for k, v in headers if k.lower() == b"content-type"]
         if len(content_types) != 1:
@@ -335,7 +354,7 @@ class App:
             if len(lengths) != 1 or not re.fullmatch(rb"[0-9]{1,20}", lengths[0]):
                 raise _HTTPError(400, "length", "Invalid Content-Length.")
             length = int(lengths[0])
-            if length > self.max_body_size:
+            if length > max_size:
                 raise _HTTPError(413, "body_too_large", "Request body exceeds the size limit.")
         body = bytearray()
         while True:
@@ -345,7 +364,7 @@ class App:
             if event["type"] != "http.request" or type(event.get("body", b"")) is not bytes:
                 raise ProtocolError("Expected an HTTP request event.")
             chunk = event.get("body", b"")
-            if len(body) + len(chunk) > self.max_body_size:
+            if len(body) + len(chunk) > max_size:
                 raise _HTTPError(413, "body_too_large", "Request body exceeds the size limit.")
             body.extend(chunk)
             if not event.get("more_body", False):

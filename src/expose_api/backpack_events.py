@@ -78,6 +78,9 @@ class JournalModel:
     def list(self, **kwargs):
         return self.resource.list(**kwargs)
 
+    def find(self, **kwargs):
+        return self.resource.find(**kwargs)
+
     def update(self, key, **kwargs):
         row = self.resource.update(key, **kwargs)
         self._append(key)

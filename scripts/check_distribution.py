@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = {"__init__.py", "access.py", "asgi.py", "backpack.py", "backpack_events.py", "enforce_type.py", "errors.py", "events.py", "models.py", "openapi.py", "py.typed", "resources.py", "server.py", "stores.py", "websocket.py"}
+MODULES = {"__init__.py", "access.py", "asgi.py", "backpack.py", "backpack_events.py", "enforce_type.py", "errors.py", "events.py", "models.py", "openapi.py", "py.typed", "resources.py", "server.py", "stores.py", "tabular.py", "websocket.py"}
 
 
 def run(*args, cwd=ROOT):
@@ -30,7 +30,7 @@ def metadata(raw, project):
         assert message.get_all(key) == [expected], (key, message.get_all(key))
     requirements = message.get_all("Requires-Dist") or []
     expected = {"enforce-type==0.1.0; extra == 'enforce-type'",
-                "backpack-store[enforce-type] @ git+https://github.com/outside-labs/backpack.git@54f5a1e883fcc32f8d87cc553dc83dae0434300d; extra == 'backpack'"}
+                "backpack-store[enforce-type] @ git+https://github.com/outside-labs/backpack.git@99a5fdee1e79e0eee9abde4be533d4ec2586120d; extra == 'backpack'"}
     normalized = {"; ".join(part.strip() for part in value.replace('"', "'").split(";")) for value in requirements}
     assert len(requirements) == 2 and normalized == expected, requirements
     assert set(message.get_all("Provides-Extra")) == {"backpack", "enforce-type"}

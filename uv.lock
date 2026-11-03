@@ -5,7 +5,7 @@ requires-python = ">=3.14"
 [[package]]
 name = "backpack-store"
 version = "0.1.0"
-source = { git = "https://github.com/outside-labs/backpack.git?rev=54f5a1e883fcc32f8d87cc553dc83dae0434300d#54f5a1e883fcc32f8d87cc553dc83dae0434300d" }
+source = { git = "https://github.com/outside-labs/backpack.git?rev=99a5fdee1e79e0eee9abde4be533d4ec2586120d#99a5fdee1e79e0eee9abde4be533d4ec2586120d" }
 
 [package.optional-dependencies]
 enforce-type = [
@@ -36,7 +36,7 @@ enforce-type = [
 
 [package.metadata]
 requires-dist = [
-    { name = "backpack-store", extras = ["enforce-type"], marker = "extra == 'backpack'", git = "https://github.com/outside-labs/backpack.git?rev=54f5a1e883fcc32f8d87cc553dc83dae0434300d" },
+    { name = "backpack-store", extras = ["enforce-type"], marker = "extra == 'backpack'", git = "https://github.com/outside-labs/backpack.git?rev=99a5fdee1e79e0eee9abde4be533d4ec2586120d" },
     { name = "enforce-type", marker = "extra == 'enforce-type'", specifier = "==0.1.0" },
 ]
 provides-extras = ["enforce-type", "backpack"]

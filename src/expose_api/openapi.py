@@ -152,6 +152,8 @@ def document(app, *, version="0.1.0", description=None):
                     operations["options"]["responses"]["204"]["headers"]["Cache-Control"] = {"schema": {"const": "no-store"}}
                 paths[mount.path + suffix] = operations
     schemas["Error"] = ERROR_SCHEMA
+    from .tabular import openapi_paths
+    paths.update(openapi_paths(app))
     components = {"schemas": schemas}
     if isinstance(app.authenticate, BearerAuth) and any(mount.record_policy is not None for mount in app._mounts):
         components["securitySchemes"] = {"BearerAuth": {"type": "http", "scheme": "bearer"}}

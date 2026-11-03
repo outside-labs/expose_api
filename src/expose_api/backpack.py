@@ -23,9 +23,10 @@ except ImportError:
 class BackpackStore[T]:
     """A scalar dataclass resource on one bounded, thread-owned SQLite facade."""
 
-    def __init__(self, backend, schema, *, events=0):
+    def __init__(self, backend, schema, *, events=0, query_fields=()):
         self._backend, self.schema = backend, schema
         self._events = events
+        self.query_fields = frozenset(query_fields)
 
     @property
     def events_enabled(self):
@@ -54,7 +55,31 @@ class BackpackStore[T]:
                 return JournalModel.configure(storage, registered, event_namespace, events, type_key, table)
             return registered
         backend = await AsyncApplicationStore.open(path, configure=configure, timeout=timeout, queue_limit=queue_limit)
-        return cls(backend, schema, events=events)
+        return cls(backend, schema, events=events, query_fields=columns)
+
+    async def tabular_page(self, *, filters=(), order=(), search=None, cursor=None,
+                           limit=50, predicate=None, scan_limit=10000, max_work=1000000):
+        """Fill a visible page before returning, within one owned transaction."""
+        from backpack_store import QueryBudgetError
+        def page(model):
+            rows, scanned, after, last_visible = [], 0, cursor, None
+            while True:
+                if scanned >= scan_limit:
+                    raise QueryBudgetError("table policy candidate budget exhausted")
+                candidate = model.find(filters=filters, order=order, search=search, cursor=after, limit=1, max_work=max_work)
+                if not candidate.rows:
+                    return tuple(rows), None
+                row = candidate.rows[0]
+                scanned += 1
+                if predicate is None or predicate(deepcopy(row.value)):
+                    if len(rows) == limit:
+                        return tuple(rows), last_visible
+                    rows.append(row)
+                    last_visible = candidate.next_cursor
+                if candidate.next_cursor is None:
+                    return tuple(rows), None
+                after = candidate.next_cursor
+        return await self._backend.run(page, transactional=True)
 
     async def _run(self, callback, *, transactional=False):
         try:

@@ -10,6 +10,7 @@ from .stores import AccessStore, MemoryStore, Store
 from .events import EventPage, EventSnapshot, EventStore
 from .asgi import App, ProtocolError, Request
 from .server import serve
+from .tabular import TableColumn
 
 __all__ = ["EventPage", "EventSnapshot", "EventStore", "AccessDeniedError", "AccessScanError", "AccessStore", "BearerAuth", "Principal", "App", "ConfigurationError", "ConflictError", "Issue", "MemoryStore", "ModelSchema",
-           "NotFoundError", "ProtocolError", "Request", "Resource", "RevisionConflictError", "Store", "ValidationError", "serve"]
+           "NotFoundError", "ProtocolError", "Request", "Resource", "RevisionConflictError", "Store", "ValidationError", "serve", "TableColumn"]
