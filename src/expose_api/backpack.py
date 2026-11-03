@@ -5,8 +5,9 @@ import re
 from copy import deepcopy
 from dataclasses import fields
 
-from .errors import ConfigurationError, ConflictError, Issue, NotFoundError, RevisionConflictError, ValidationError
+from .errors import AccessDeniedError, AccessScanError, ConfigurationError, ConflictError, Issue, NotFoundError, RevisionConflictError, ValidationError
 from .models import ModelSchema
+from .stores import _visible
 
 try:
     from backpack_store import (
@@ -95,7 +96,7 @@ class BackpackStore[T]:
         self._revision(expected_revision)
         if not callable(transform) or inspect.iscoroutinefunction(transform):
             raise ValueError("Storage transforms must be synchronous.")
-        validation_issues = []
+        validation_issues, access_errors = [], []
         def update(model):
             row = model.get(key)
             if expected_revision is not None and row.revision != expected_revision:
@@ -113,13 +114,56 @@ class BackpackStore[T]:
                     # Retain only the API's value-free issues until rollback finishes.
                     validation_issues.extend(error.issues)
                     raise
+                except (AccessDeniedError, NotFoundError) as error:
+                    access_errors.append(type(error))
+                    raise
             return model.update(key, expected_revision=row.revision, transform=checked)
         try:
             return await self._run(update, transactional=True)
         except TransactionError:
             if validation_issues:
                 raise ValidationError(*validation_issues) from None
+            if access_errors:
+                raise access_errors[0]("Record access denied.") from None
             raise
+
+    async def _access_run(self, callback):
+        errors = []
+        def protected(model):
+            try:
+                return callback(model)
+            except (AccessDeniedError, AccessScanError, NotFoundError) as error:
+                errors.append(type(error))
+                raise
+        try:
+            return await self._run(protected, transactional=True)
+        except TransactionError:
+            if errors:
+                raise errors[0]("Record access could not complete.") from None
+            raise
+
+    async def list_where(self, predicate, *, offset=0, limit=100, scan_limit=10000):
+        def page(model):
+            def values():
+                after, fetched = None, 0
+                while fetched <= scan_limit:
+                    rows = model.list(after=after, limit=min(1000, scan_limit + 1 - fetched))
+                    if not rows:
+                        return
+                    for row in rows:
+                        yield row.value
+                    fetched += len(rows)
+                    after = rows[-1].key
+            return _visible(values(), predicate, offset=offset, limit=limit, scan_limit=scan_limit)
+        return await self._access_run(page)
+
+    async def delete_where(self, key: str, predicate) -> None:
+        def delete(model):
+            row = model.get(key)
+            if not predicate(deepcopy(row.value)):
+                raise NotFoundError("Record not found.")
+            model.delete(key, expected_revision=row.revision)
+        await self._access_run(delete)
 
     async def delete(self, key: str) -> None:
         await self.delete_checked(key)

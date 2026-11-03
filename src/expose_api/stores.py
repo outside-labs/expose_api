@@ -6,7 +6,7 @@ from itertools import islice
 from threading import RLock
 from typing import Protocol, runtime_checkable
 
-from .errors import ConflictError, NotFoundError
+from .errors import AccessScanError, ConflictError, NotFoundError
 
 
 @runtime_checkable
@@ -23,6 +23,31 @@ class Store[T](Protocol):
     async def list(self, *, offset: int, limit: int) -> list[T]: ...
     async def update(self, key: str, transform: Callable[[T], T]) -> T: ...
     async def delete(self, key: str) -> None: ...
+
+
+@runtime_checkable
+class AccessStore[T](Store[T], Protocol):
+    """Additional atomic capabilities required by protected resource views."""
+
+    async def list_where(self, predicate: Callable[[T], bool], *, offset: int, limit: int, scan_limit: int) -> list[T]: ...
+    async def delete_where(self, key: str, predicate: Callable[[T], bool]) -> None: ...
+
+
+def _visible(values, predicate, *, offset, limit, scan_limit):
+    if (type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 1000
+            or type(scan_limit) is not int or not 1 <= scan_limit <= 10000):
+        raise ValueError("Invalid bounded visible pagination.")
+    result, visible = [], 0
+    for index, value in enumerate(values):
+        if index >= scan_limit:
+            raise AccessScanError("Visible page exceeds the scan budget.")
+        if predicate(deepcopy(value)):
+            if visible >= offset:
+                result.append(deepcopy(value))
+                if len(result) == limit:
+                    return result
+            visible += 1
+    return result
 
 
 class MemoryStore[T]:
@@ -68,5 +93,15 @@ class MemoryStore[T]:
     async def delete(self, key: str) -> None:
         with self._lock:
             if key not in self._records:
+                raise NotFoundError("Record not found.")
+            del self._records[key]
+
+    async def list_where(self, predicate, *, offset=0, limit=100, scan_limit=10000):
+        with self._lock:
+            return _visible(self._records.values(), predicate, offset=offset, limit=limit, scan_limit=scan_limit)
+
+    async def delete_where(self, key: str, predicate) -> None:
+        with self._lock:
+            if key not in self._records or not predicate(deepcopy(self._records[key])):
                 raise NotFoundError("Record not found.")
             del self._records[key]
