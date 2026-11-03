@@ -1,5 +1,8 @@
 # expose-api
 
+See [portable acceptance runners](docs/ci.md) for the default three-OS CI matrix
+and explicit manual ARM64 selection.
+
 Resources can explicitly select a `ModelSchema` subclass with
 `App.include(..., schema=selected_schema)` or `Resource(..., schema=...)`.
 The schema must use the same model and `id_field`; protected principal views
