@@ -196,3 +196,9 @@ The [Project](https://github.com/orgs/outside-labs/projects/14) and
 [issues](https://github.com/outside-labs/expose_api/issues) track later SQLite,
 OpenAPI, WebSocket and optional Hidden Moves/Backpack/CLI integrations. Version
 0.1.0 does not include those features. License terms have not yet been specified.
+
+## Persistent applications
+
+The [SQLite persistence profile](docs/persistence.md) defines the optional
+Backpack Store adapter's model intersection, atomicity, cancellation, migration
+and process ownership requirements. Persistent integration remains explicit.
