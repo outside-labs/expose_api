@@ -23,8 +23,8 @@ No model is imported from stored data.
 - `get`, `list` and transforms return detached validated values. Missing keys
   map to API `NotFoundError`; backend/codec errors never disclose submitted data.
 - `list(offset, limit)` uses ascending immutable domain-key order, with the
-  existing API bounds (nonnegative offset, limit 1–1000). Each page runs in one
-  read transaction; separate pages see current committed state and can shift
+  existing API limit bounds (1–1000). Each page runs in one serialized
+  transaction; separate pages see current committed state and can shift
   under concurrent insertions/deletions. Offset work is bounded at 10,000.
 - `update` fetches the current row and runs the synchronous transform inside one
   `BEGIN IMMEDIATE` unit of work, then replaces using its current revision.
@@ -32,7 +32,9 @@ No model is imported from stored data.
   Transforms must avoid external side effects and recursive storage calls.
 - `delete` reads and deletes in one write transaction. Revisions are canonical
   decimal strings and increment on replacement. The adapter exposes an explicit
-  checked update for application-level optimistic concurrency; ordinary CRUD
+  checked update and deletion for application-level optimistic concurrency;
+  stale caller revisions map to `RevisionConflictError` and HTTP 409 with code
+  `revision_conflict`. Ordinary CRUD
   preserves the existing unconditional atomic-transform contract.
 
 ## Ownership, durability and recovery

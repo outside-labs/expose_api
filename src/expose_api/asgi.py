@@ -11,7 +11,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, quote
 
-from .errors import ConfigurationError, ConflictError, NotFoundError, ValidationError
+from .errors import ConfigurationError, ConflictError, NotFoundError, RevisionConflictError, ValidationError
 from .models import MAX_DEPTH
 from .resources import Resource
 
@@ -158,6 +158,8 @@ class App:
                               details=[issue.as_dict() for issue in exc.issues])
         except NotFoundError:
             response = _error(404, "not_found", "Record not found.")
+        except RevisionConflictError:
+            response = _error(409, "revision_conflict", "Record changed after the expected revision.")
         except ConflictError:
             response = _error(409, "conflict", "Record already exists.")
         except Exception as exc:
