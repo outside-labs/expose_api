@@ -44,7 +44,7 @@ def main():
     loader = unittest.TestLoader()
     suite = unittest.TestSuite(loader.loadTestsFromName(name) for name in names)
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    receipt = {"profile": "enforce-type-api-v1", "python": platform.python_version(), "os": platform.system(),
+    receipt = {"profile": "enforce-type-api-v1", "python": platform.python_version(), "os": platform.system(), "machine": platform.machine(),
         "passed": result.wasSuccessful() and not result.skipped,
         "package_version": expose_api.__version__, "schema": EnforceTypeSchema.__name__,
         "engine": {"version": metadata.version("enforce-type"), "package_sha256": engine_digest},

@@ -39,6 +39,6 @@ class Socket:
             await asyncio.wait_for(self.task, 3)
 
 
-def register(app, resource, **kwargs):
+def register(app, resource, *, send_timeout=0.1, auth_timeout=0.1, **kwargs):
     app.subscribe(resource, origins=("http://localhost",), hosts=("localhost",),
-                  poll_interval=0.01, send_timeout=0.1, auth_timeout=0.1, subscribe_timeout=0.1, **kwargs)
+                  poll_interval=0.01, send_timeout=send_timeout, auth_timeout=auth_timeout, subscribe_timeout=0.1, **kwargs)

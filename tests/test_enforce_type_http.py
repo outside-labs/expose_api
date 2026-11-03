@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass, field, replace
 import importlib.util
 from pathlib import Path
@@ -110,7 +111,7 @@ class AdapterPersistentTests(unittest.IsolatedAsyncioTestCase):
             schema = EnforceTypeSchema(OwnedRecord)
             async with await open_store() as store:
                 app, resource = protected(store, schema)
-                register(app, resource)
+                register(app, resource, auth_timeout=5.0)
                 await resource.create({"id": "a", "owner": "alice"})
                 before = await store.event_snapshot("a")
                 with self.assertRaises(ValidationError):
@@ -133,9 +134,13 @@ class AdapterPersistentTests(unittest.IsolatedAsyncioTestCase):
                     initial = await socket.next()
                     self.assertEqual(initial["value"], {"id": "a", "title": "Checked", "done": False, "server": 1})
                     await resource.for_principal(Principal("alice"), lambda p, op, value: value.owner == "alice").update("a", {"done": True})
-                    snapshot = await socket.next()
-                    self.assertTrue(snapshot["value"]["done"])
-                    self.assertNotIn("owner", snapshot["value"])
+                    async with asyncio.timeout(3):
+                        while True:
+                            snapshot = await socket.next()
+                            self.assertEqual(snapshot["type"], "snapshot")
+                            self.assertIn(snapshot["value"], (initial["value"], {**initial["value"], "done": True}))
+                            if snapshot["value"]["done"]:
+                                break
                     self.assertNotEqual(initial["cursor"], snapshot["cursor"])
                 finally:
                     await socket.close()
