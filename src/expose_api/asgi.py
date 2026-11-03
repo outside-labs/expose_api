@@ -15,6 +15,7 @@ from .access import Principal
 from .errors import AccessDeniedError, AccessScanError, ConfigurationError, ConflictError, NotFoundError, RevisionConflictError, ValidationError
 from .models import MAX_DEPTH
 from .resources import Resource
+from .websocket import EventSockets
 
 logger = logging.getLogger("expose_api")
 OPERATIONS = frozenset({"list", "get", "create", "update", "delete"})
@@ -123,6 +124,16 @@ class App:
         self._lifespan_factory = lifespan or _empty_lifespan
         self._mounts: list[_Mount] = []
         self._frozen = False
+        self._sockets = EventSockets(self)
+
+    def subscribe(self, resource, **options):
+        """Explicitly enable bounded, protected single-record WebSockets."""
+        if self._frozen:
+            raise ConfigurationError("Register subscriptions before serving the application.")
+        mount = next((m for m in self._mounts if m.resource is resource), None)
+        if mount is None:
+            raise ConfigurationError("Subscribe to a resource registered on this App.")
+        self._sockets.register(mount, options)
 
     def run(self, *, host: str = "127.0.0.1", port: int = 8000) -> None:
         """Run the standard-library development HTTP server until interrupted."""
@@ -167,6 +178,9 @@ class App:
         self._frozen = True
         if scope["type"] == "lifespan":
             await self._lifespan(receive, send)
+            return
+        if scope["type"] == "websocket":
+            await self._sockets(scope, receive, send)
             return
         if scope["type"] != "http":
             raise ProtocolError("Unsupported ASGI scope type.")
@@ -350,6 +364,8 @@ class App:
         if event["type"] != "lifespan.startup":
             raise ProtocolError("Expected lifespan.startup.")
         stack = AsyncExitStack()
+        self._sockets.stopping = False
+        self._sockets.owner = None
         try:
             await stack.enter_async_context(self._lifespan_factory(self))
         except Exception as exc:
@@ -362,9 +378,11 @@ class App:
             if event["type"] != "lifespan.shutdown":
                 raise ProtocolError("Expected lifespan.shutdown.")
         except BaseException:
+            await self._sockets.stop()
             await stack.__aexit__(*sys.exc_info())
             raise
         try:
+            await self._sockets.stop()
             await stack.aclose()
         except Exception as exc:
             logger.error("Application shutdown failed (%s).", type(exc).__name__)

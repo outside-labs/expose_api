@@ -5,6 +5,35 @@ ASGI. It uses only the standard library. Collections, client writes, arbitrary
 filters, historical value replay and delivery acknowledgments are outside v1.
 The HTTP development runner does not perform WebSocket upgrades.
 
+## Explicit registration
+
+```python
+from dataclasses import dataclass, field
+from expose_api import App, MemoryStore, Principal
+
+@dataclass
+class Note:
+    id: str
+    owner: str = field(metadata={"expose_api": {"write_only": True}})
+    title: str = ""
+
+# Supply a bounded, nonblocking verifier for the application's credentials.
+app = App(authenticate=verify_credentials, auth_challenge="Custom")
+notes = app.include(Note, store=MemoryStore(events=256), path="/notes",
+    authorize=lambda request: "read" in request.principal.scopes,
+    record_policy=lambda principal, operation, value: principal.subject == value.owner)
+app.subscribe(notes, origins=("https://ui.example",), hosts=("api.example",),
+    connections=64, pending_limit=64, poll_interval=0.25,
+    send_timeout=5, auth_timeout=5, subscribe_timeout=5,
+    max_message_bytes=1024 * 1024, lifetime=3600)
+```
+
+The selected origins/hosts are deployment configuration; the example does not
+start a listener. The ASGI host must supply trusted scheme/path/header scope
+values. Forwarded headers require separately configured trusted proxy handling.
+Base imports open no threads, listeners or stores. `MemoryStore(events=0)` is
+the compatible default; enabling subscriptions on it fails at registration.
+
 ## Wire contract
 
 The client connects to an existing get-enabled record path, offering the

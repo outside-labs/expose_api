@@ -4,9 +4,8 @@ Turn ordinary typed dataclasses into JSON applications. Native ASGI, generated
 CRUD, and a standard-library development runner, with **no runtime dependencies**.
 Python 3.14+ is required.
 
-The adopted [resource event profile](docs/events.md) specifies bounded native
-ASGI subscriptions, current-record access checks and committed-state recovery.
-Its implementation is tracked by WS-01/02 and their focused child issues.
+The [resource event profile](docs/events.md) provides opt-in native ASGI
+single-record subscriptions, current-record access checks and bounded recovery.
 
 The optional [identity and record access profile](docs/access.md) supports
 caller-owned authentication and atomic value policies. Existing `authorize`
@@ -156,8 +155,8 @@ cross-process state sharing or capacity eviction.
 ## ASGI and lifecycle
 
 `app` is an ASGI 3 callable and can be used by independently installed ASGI
-servers. HTTP and lifespan are implemented directly. Unsupported scope types,
-including WebSocket, raise `ProtocolError`. Standard ASGI middleware can wrap the
+servers. HTTP, lifespan and explicitly registered WebSocket subscriptions are
+implemented directly. Unsupported scope types raise `ProtocolError`. Standard ASGI middleware can wrap the
 application. Mounted root paths are reflected in relative Location headers;
 generated links do not trust the Host header.
 
