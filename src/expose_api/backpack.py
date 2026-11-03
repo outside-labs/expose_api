@@ -8,6 +8,7 @@ from dataclasses import fields
 from .errors import AccessDeniedError, AccessScanError, ConfigurationError, ConflictError, Issue, NotFoundError, RevisionConflictError, ValidationError
 from .models import ModelSchema
 from .stores import _visible
+from .events import _event_limit
 
 try:
     from backpack_store import (
@@ -22,13 +23,23 @@ except ImportError:
 class BackpackStore[T]:
     """A scalar dataclass resource on one bounded, thread-owned SQLite facade."""
 
-    def __init__(self, backend, schema):
+    def __init__(self, backend, schema, *, events=0):
         self._backend, self.schema = backend, schema
+        self._events = events
+
+    @property
+    def events_enabled(self):
+        return self._events > 0
 
     @classmethod
     async def open(cls, model: type[T], path, *, namespace: str, table: str,
                    type_key: str, id_field: str = "id", schema_version: int = 1,
-                   columns=None, unique=(), timeout: float = 5.0, queue_limit: int = 64):
+                   columns=None, unique=(), timeout: float = 5.0, queue_limit: int = 64,
+                   events: int = 0, event_namespace: str | None = None):
+        _event_limit(events, allow_disabled=True)
+        if (events and (type(event_namespace) is not str or not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", event_namespace)
+                       or event_namespace == namespace) or not events and event_namespace is not None):
+            raise ConfigurationError("Events require a distinct explicit namespace of at most 40 lowercase identifier characters.")
         schema = ModelSchema(model, id_field=id_field)
         if schema.id_type is not str:
             raise ConfigurationError("The Backpack resource profile requires a string domain key.")
@@ -38,13 +49,16 @@ class BackpackStore[T]:
             registered = storage.register(codec, namespace=namespace, table=table,
                                           primary_key=id_field, columns=columns, unique=unique)
             storage.initialize(namespace)
+            if events:
+                from .backpack_events import JournalModel
+                return JournalModel.configure(storage, registered, event_namespace, events, type_key, table)
             return registered
         backend = await AsyncApplicationStore.open(path, configure=configure, timeout=timeout, queue_limit=queue_limit)
-        return cls(backend, schema)
+        return cls(backend, schema, events=events)
 
     async def _run(self, callback, *, transactional=False):
         try:
-            return await self._backend.run(callback, transactional=transactional)
+            return await self._backend.run(callback, transactional=transactional or self.events_enabled)
         except MissingRow:
             raise NotFoundError("Record not found.") from None
         except StaleRow:
@@ -72,6 +86,16 @@ class BackpackStore[T]:
     async def get_row(self, key: str):
         """Return a detached value and its storage revision/envelope identity."""
         return await self._run(lambda model: model.get(key))
+
+    async def event_snapshot(self, key):
+        if not self.events_enabled:
+            raise ConfigurationError("Events are not enabled for this store.")
+        return await self._run(lambda model: model.snapshot(key), transactional=True)
+
+    async def event_changes(self, cursor, *, key, limit=64):
+        if not self.events_enabled:
+            raise ConfigurationError("Events are not enabled for this store.")
+        return await self._run(lambda model: model.page(cursor, key, limit), transactional=True)
 
     async def list(self, *, offset: int = 0, limit: int = 100) -> list[T]:
         if type(offset) is not int or not 0 <= offset <= 10000:
