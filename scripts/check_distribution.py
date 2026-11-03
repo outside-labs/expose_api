@@ -32,7 +32,7 @@ def metadata(raw, project):
     assert len(requirements) == 1 and requirements[0].partition(";")[2].strip().replace('"', "'") == "extra == 'backpack'"
     assert "54f5a1e883fcc32f8d87cc553dc83dae0434300d" in requirements[0]
     assert message.get_all("Provides-Extra") == ["backpack"]
-    assert message.get_payload().strip() == (ROOT / "README.md").read_text().strip()
+    assert message.get_payload().replace("\r\n", "\n").strip() == (ROOT / "README.md").read_text(encoding="utf-8").strip()
 
 
 def wheel_files(path, version, project):

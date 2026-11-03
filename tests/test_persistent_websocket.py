@@ -95,17 +95,28 @@ class PersistentSubscriptionTests(unittest.IsolatedAsyncioTestCase):
             raise
         self.assertEqual(process.returncode, 0, error.decode())
 
+    async def snapshot_named(self, socket, title):
+        # A commit between snapshot and journal reads can repeat the baseline.
+        # The contract recovers current state and permits duplicate snapshots.
+        async with asyncio.timeout(3):
+            while True:
+                event = await socket.next()
+                self.assertEqual(event["type"], "snapshot")
+                self.assertEqual(set(event["value"]), {"id", "title"})
+                if event["value"]["title"] == title:
+                    return event
+
     async def test_other_process_delivers_to_independent_subscribers_after_commit(self):
         first, second = await self.socket(), await self.socket(subject="second")
         baseline, _ = await first.next(), await second.next()
         await self.writer("Committed")
-        a, b = await first.next(), await second.next()
+        a, b = await self.snapshot_named(first, "Committed"), await self.snapshot_named(second, "Committed")
         self.assertEqual(a["value"], b["value"])
         self.assertEqual(a["value"], {"id": "a", "title": "Committed"})
         self.assertNotEqual(a["cursor"], baseline["cursor"])
         await first.close()
         await self.writer("Again")
-        self.assertEqual((await second.next())["value"]["title"], "Again")
+        self.assertEqual((await self.snapshot_named(second, "Again"))["value"]["title"], "Again")
 
     async def test_failed_external_transform_does_not_publish_or_advance_cursor(self):
         socket = await self.socket()
