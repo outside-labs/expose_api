@@ -38,7 +38,7 @@ OpenAPI contract before adoption. Validation never performs asynchronous I/O;
 store transforms and record policies retain their atomic ownership.
 
 This is a finite compatibility adapter, with no performance claim or default
-backend migration. The [assessment](https://github.com/outside-labs/enforce_type/blob/main/docs/expose-api.md)
+backend migration. The [assessment](https://github.com/wispsy/enforce_type/blob/main/docs/expose-api.md)
 records the policy differences that prevent a whole-model replacement.
 
 ## Resource acceptance

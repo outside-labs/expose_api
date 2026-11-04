@@ -30,7 +30,7 @@ def metadata(raw, project):
         assert message.get_all(key) == [expected], (key, message.get_all(key))
     requirements = message.get_all("Requires-Dist") or []
     expected = {"enforce-type==0.1.0; extra == 'enforce-type'",
-                "backpack-store[enforce-type] @ git+https://github.com/outside-labs/backpack.git@9a691aa551bf7fb42134168452bbdb2e1d454928; extra == 'backpack'"}
+                "backpack-store[enforce-type] @ git+https://github.com/wispsy/backpack.git@9a691aa551bf7fb42134168452bbdb2e1d454928; extra == 'backpack'"}
     normalized = {"; ".join(part.strip() for part in value.replace('"', "'").split(";")) for value in requirements}
     assert len(requirements) == 2 and normalized == expected, requirements
     assert set(message.get_all("Provides-Extra")) == {"backpack", "enforce-type"}

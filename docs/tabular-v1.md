@@ -1,6 +1,6 @@
 # Opt-in tabular HTTP profile, version 1
 
-This adopts [tabular/1](https://github.com/outside-labs/compose_application/blob/d8c4e3a1d4cd1979222c0dddcbf0a14d44ee415c/docs/tabular-v1.md).
+This adopts [tabular/1](https://github.com/wispsy/compose_application/blob/d8c4e3a1d4cd1979222c0dddcbf0a14d44ee415c/docs/tabular-v1.md).
 The finite requests/errors in `tabular-v1.json` accompany the implemented
 schema/query and explicitly enabled checked cell routes. Existing
 CRUD routes and shapes stay unchanged. A trusted application explicitly

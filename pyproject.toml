@@ -11,11 +11,11 @@ dependencies = []
 
 [project.optional-dependencies]
 enforce-type = ["enforce-type==0.1.0"]
-backpack = ["backpack-store[enforce-type] @ git+https://github.com/outside-labs/backpack.git@9a691aa551bf7fb42134168452bbdb2e1d454928"]
+backpack = ["backpack-store[enforce-type] @ git+https://github.com/wispsy/backpack.git@9a691aa551bf7fb42134168452bbdb2e1d454928"]
 
 [project.urls]
-Source = "https://github.com/outside-labs/expose_api"
-Issues = "https://github.com/outside-labs/expose_api/issues"
+Source = "https://github.com/wispsy/expose_api"
+Issues = "https://github.com/wispsy/expose_api/issues"
 
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]
