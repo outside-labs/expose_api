@@ -8,7 +8,7 @@ does not publish a tag, a GitHub release or a package.
 2. Run `uv run --frozen python scripts/check_distribution.py --tag v0.1.0 --output-dir /path/to/new/candidate-directory`.
    Review exact contents, metadata, tests and SHA256 receipts. Version, tag and
    package `__version__` must agree.
-3. Confirm the PyPI Trusted Publisher identifies owner `outside-labs`, repository
+3. Confirm the PyPI Trusted Publisher identifies owner `wispsy`, repository
    `expose_api`, workflow `release.yaml`, and environment `pypi`. The publisher is
    configured separately on PyPI; this repository does not inspect that account.
 4. Review the GitHub `pypi` environment before publication. It currently permits
